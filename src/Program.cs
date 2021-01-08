@@ -1,4 +1,5 @@
 ﻿using System;
+using hlback.FileManagement;
 
 namespace hlback
 {
@@ -6,7 +7,10 @@ namespace hlback
     {
         static void Main(string[] args)
         {
-            Console.WriteLine("Hello World!");
+            Console.WriteLine("Starting.");
+			Configuration config = new Configuration();
+			BackupProcessor backupProcessor = new BackupProcessor(config);
+			backupProcessor.copyFile("b.txt", "a.txt", true);
         }
     }
 }
