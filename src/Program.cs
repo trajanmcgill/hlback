@@ -10,7 +10,7 @@ namespace hlback
             Console.WriteLine("Starting.");
 			Configuration config = new Configuration();
 			BackupProcessor backupProcessor = new BackupProcessor(config);
-			backupProcessor.copyFile("b.txt", "a.txt", true);
+			backupProcessor.makeEntireBackup("/home/trajan/Documents/development/backupTestSource", "/home/trajan/Documents/development/backupTestDestinationRoot");
         }
     }
 }
