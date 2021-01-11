@@ -1,23 +1,29 @@
 using System;
+using System.Text;
 using System.IO;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
 
 namespace hlback.FileManagement
 {
 	class BackupProcessor
 	{
+		private const int HashLength = 40;
+		private const int DatabaseFilePathLength = (HashLength - 1) * 2 + 1;
+		private readonly Encoding DatabaseFileEncoding = Encoding.UTF8;
+
 		private readonly Configuration.SystemType systemType;
-		private readonly ILinker linker;
+		private readonly ILinker hardLinker;
 
 
 		public BackupProcessor(Configuration configuration)
 		{
 			systemType = configuration.systemType;
 			if (systemType == Configuration.SystemType.Windows)
-				linker = new WindowsLinker();
+				hardLinker = new WindowsLinker();
 			else
-				linker = new LinuxLinker();
+				hardLinker = new LinuxLinker();
 		} // end BackupProcessor constructor
 
 
@@ -25,33 +31,16 @@ namespace hlback.FileManagement
 		{
 			DirectoryInfo backupsRootDirectory = new DirectoryInfo(backupsRootPath);
 
-			// Check for previous backups at the backups root path.
-			IEnumerable<DirectoryInfo> previousBackupDirectories = backupsRootDirectory.EnumerateDirectories("????-??-??.??-??-??.???");
+			// Check for a backups database at the destination.
+			DirectoryInfo databaseDirectory = new DirectoryInfo(Path.Combine(backupsRootPath, ".hlbackdatabase"));
+			if (!databaseDirectory.Exists)
+				databaseDirectory.Create();
 
-			if(!previousBackupDirectories.Any())
-			{
-				// No previous backups exist at this destination.
-				// Do a simple, complete file copy backup from the source path to a new subdirectory of the backups root directory.
+			// Create subdirectory for the new backup.
+			DirectoryInfo subDirectory = createUniqueSubdirectory(backupsRootDirectory);
 
-				// Create subdirectory for the new backup.
-				DirectoryInfo subDirectory = createUniqueSubdirectory(backupsRootDirectory);
-
-				// Copy all the files.
-				makeFolderTreeBackup(new DirectoryInfo(sourcePath), subDirectory);
-			}
-			else
-			{
-				// At least one previous backup exists here. Use the most recent one as a point of comparison,
-				// and copy only files from the source that don't exist in the most recent backup.
-				// For those that do exist, create a hardlink to them instead of copying from the source.
-				DirectoryInfo mostRecentBackup =
-					previousBackupDirectories
-						.OrderByDescending(backupDirectory => long.Parse(String.Join("", backupDirectory.Name.Split(new char[] {'-', '.'}))))
-						.First();
-
-				// WORKING HERE
-				Console.WriteLine("Most recent backup resides in " + mostRecentBackup.FullName);
-			}
+			// Copy all the files.
+			makeFolderTreeBackup(new DirectoryInfo(sourcePath), subDirectory, databaseDirectory);
 		} // end makeEntireBackup()
 
 
@@ -73,19 +62,105 @@ namespace hlback.FileManagement
 		} // end createUniqueSubdirectory()
 
 
-		private void makeFolderTreeBackup(DirectoryInfo sourceDirectory, DirectoryInfo destinationDirectory)
+		private void makeFolderTreeBackup(DirectoryInfo sourceDirectory, DirectoryInfo destinationDirectory, DirectoryInfo databaseDirectory)
 		{
-			// Recurse through subdirectories
+			// Recurse through subdirectories, copying each one.
 			foreach (DirectoryInfo individualDirectory in sourceDirectory.EnumerateDirectories())
 			{
 				DirectoryInfo destinationSubDirectory = destinationDirectory.CreateSubdirectory(individualDirectory.Name);
-				makeFolderTreeBackup(individualDirectory, destinationSubDirectory);
+				makeFolderTreeBackup(individualDirectory, destinationSubDirectory, databaseDirectory);
 			}
 
-			// Copy the files in this directory
+			// Back up the files in this directory.
 			foreach (FileInfo individualFile in sourceDirectory.EnumerateFiles())
-				individualFile.CopyTo(Path.Combine(destinationDirectory.FullName, individualFile.Name));
+			{
+				// Calculate a hash of the file to be backed up.
+				string fileHash = getHash(individualFile);
+
+				// Get a FileInfo object corresponding to a records file for that hash in the backups database.
+				FileInfo databaseFile = getDatabaseFileForHash(fileHash, databaseDirectory);
+
+				// Build the backup destination for the current file.
+				string destinationFilePath = Path.Combine(destinationDirectory.FullName, individualFile.Name);
+
+				// Make a full copy of the file if needed, but otherwise create a hard link from a previous backup
+				string linkFilePath = getLinkFilePath(databaseFile);
+				if (linkFilePath == null)
+				{
+					Console.WriteLine($"Copying {individualFile.FullName}");
+					Console.WriteLine($"    to {destinationFilePath}");
+					individualFile.CopyTo(destinationFilePath);
+				}
+				else
+				{
+					Console.WriteLine($"Linking {linkFilePath}");
+					Console.WriteLine($"    to {destinationFilePath}");
+					hardLinker.createHardLink(destinationFilePath, linkFilePath);
+				}
+				addDatabaseRecord(databaseFile, destinationFilePath, (linkFilePath == null));
+			}
 		} // end makeFolderTreeBackup()
+
+
+		private void addDatabaseRecord(FileInfo databaseFile, string newFilePath, bool isFullCopy)
+		{
+			StreamWriter fileStream = null;
+
+			bool databaseFileExistedAlready = databaseFile.Exists;
+			
+			try
+			{
+				// Create or open database file.
+				if (!databaseFileExistedAlready)
+					fileStream = databaseFile.CreateText();
+				else
+					fileStream = new StreamWriter(databaseFile.FullName, true, DatabaseFileEncoding);
+				
+				// Write new record, consisting of the path where the new file was copied.
+				// The first record of the file and the first record after an empty line correspond to full copies.
+				// Hard links are recorded as new paths following immediately on the next line after the last record.
+				if (isFullCopy && databaseFileExistedAlready)
+					fileStream.WriteLine((string)null);
+				fileStream.WriteLine(newFilePath);
+			}
+			finally { fileStream?.Dispose(); }
+		} // end addDatabaseRecord()
+
+
+		private string getLinkFilePath(FileInfo databaseFile)
+		{
+			// ADD CODE HERRE
+			//if (!databaseFile.Exists)
+				return null;
+		} // end getLinkFilePath()
+
+
+		private FileInfo getDatabaseFileForHash(string hash, DirectoryInfo databaseDirectory)
+		{
+			int i;
+			DirectoryInfo pathCrawler;
+			string databaseFilePath = databaseDirectory.FullName;
+			for (i = 0; i < hash.Length - 1; i++)
+			{
+				databaseFilePath = Path.Combine(databaseFilePath, hash[i].ToString());
+				pathCrawler = new DirectoryInfo(databaseFilePath);
+				if (!pathCrawler.Exists)
+					pathCrawler.Create();
+			}
+			databaseFilePath = Path.Combine(databaseFilePath, hash[i].ToString());
+
+			return new FileInfo(databaseFilePath);
+		} // end getDatabaseFileForHash()
+
+
+		private string getHash(FileInfo file)
+		{
+			using(SHA1 hasher = SHA1.Create())
+			using(FileStream stream = file.Open(FileMode.Open, FileAccess.Read))
+			{
+				return BitConverter.ToString(hasher.ComputeHash(stream)).Replace("-", "").ToLower();
+			}
+		} // end getHash()
 
 
 		private DirectoryInfo createSubDirectory(DirectoryInfo baseDirectory, string subDirectoryName)
@@ -105,7 +180,7 @@ namespace hlback.FileManagement
 		private void copyFile(string newFileName, string sourceFileName, bool asHardLink = false)
 		{
 			if (asHardLink)
-				linker.createHardLink(newFileName, sourceFileName);
+				hardLinker.createHardLink(newFileName, sourceFileName);
 			else
 				File.Copy(sourceFileName, newFileName);
 		} // end copyFile()
