@@ -37,38 +37,39 @@ namespace hlback.FileManagement
 				databaseDirectory.Create();
 
 			// Create subdirectory for the new backup.
-			DirectoryInfo subDirectory = createUniqueSubdirectory(backupsRootDirectory);
+			DirectoryInfo subDirectory = createBackupTimeSubdirectory(backupsRootDirectory);
+			string backupTimeString = subDirectory.Name;
 
 			// Copy all the files.
-			makeFolderTreeBackup(new DirectoryInfo(sourcePath), subDirectory, databaseDirectory);
+			makeFolderTreeBackup(new DirectoryInfo(sourcePath), subDirectory, databaseDirectory, backupTimeString);
 		} // end makeEntireBackup()
 
 
-		private DirectoryInfo createUniqueSubdirectory(DirectoryInfo baseDirectory)
+		private DirectoryInfo createBackupTimeSubdirectory(DirectoryInfo baseDirectory)
 		{
 			// Create date/time-based subdirectory.
 			// In the unlikely scenario one can't be created because it already exists,
 			// keep trying with a new name until there is no conflict.
-			string backupDestinationSubDirectory;
+			string backupDestinationSubDirectoryName;
 			DirectoryInfo subDirectory = null;
 			while(subDirectory == null)
 			{
-				backupDestinationSubDirectory = DateTime.Now.ToString("yyyy-MM-dd.HH-mm-ss.fff");
-				subDirectory = createSubDirectory(baseDirectory, backupDestinationSubDirectory);
+				backupDestinationSubDirectoryName = DateTime.Now.ToString("yyyy-MM-dd.HH-mm-ss.fff");
+				subDirectory = createSubDirectory(baseDirectory, backupDestinationSubDirectoryName);
 				if (subDirectory == null)
 					System.Threading.Thread.Sleep(1);
 			}
 			return subDirectory;
-		} // end createUniqueSubdirectory()
+		} // end createBackupTimeSubdirectory()
 
 
-		private void makeFolderTreeBackup(DirectoryInfo sourceDirectory, DirectoryInfo destinationDirectory, DirectoryInfo databaseDirectory)
+		private void makeFolderTreeBackup(DirectoryInfo sourceDirectory, DirectoryInfo destinationDirectory, DirectoryInfo databaseDirectory, string backupTimeString)
 		{
 			// Recurse through subdirectories, copying each one.
 			foreach (DirectoryInfo individualDirectory in sourceDirectory.EnumerateDirectories())
 			{
 				DirectoryInfo destinationSubDirectory = destinationDirectory.CreateSubdirectory(individualDirectory.Name);
-				makeFolderTreeBackup(individualDirectory, destinationSubDirectory, databaseDirectory);
+				makeFolderTreeBackup(individualDirectory, destinationSubDirectory, databaseDirectory, backupTimeString);
 			}
 
 			// Back up the files in this directory.
@@ -77,14 +78,15 @@ namespace hlback.FileManagement
 				// Calculate a hash of the file to be backed up.
 				string fileHash = getHash(individualFile);
 
-				// Get a FileInfo object corresponding to a records file for that hash in the backups database.
-				FileInfo databaseFile = getDatabaseFileForHash(fileHash, databaseDirectory);
-
-				// Build the backup destination for the current file.
+				// Figure out the backup destination for the current file.
 				string destinationFilePath = Path.Combine(destinationDirectory.FullName, individualFile.Name);
 
+				// Get a DirectoryInfo object corresponding to a records location for that hash in the backups database.
+				DirectoryInfo databaseRecordLocation = getDatabaseRecordLocationForHash(fileHash, databaseDirectory);
+
+
 				// Make a full copy of the file if needed, but otherwise create a hard link from a previous backup
-				string linkFilePath = getLinkFilePath(databaseFile);
+				string linkFilePath = getLinkFilePath(databaseRecordLocation);
 				if (linkFilePath == null)
 				{
 					Console.WriteLine($"Copying {individualFile.FullName}");
@@ -97,13 +99,16 @@ namespace hlback.FileManagement
 					Console.WriteLine($"    to {destinationFilePath}");
 					hardLinker.createHardLink(destinationFilePath, linkFilePath);
 				}
-				addDatabaseRecord(databaseFile, destinationFilePath, (linkFilePath == null));
+				addDatabaseRecord(databaseRecordLocation, backupTimeString, destinationFilePath, (linkFilePath == null));
 			}
 		} // end makeFolderTreeBackup()
 
 
-		private void addDatabaseRecord(FileInfo databaseFile, string newFilePath, bool isFullCopy)
+		private void addDatabaseRecord(DirectoryInfo databaseRecordLocation, string backupTimeString, string newFilePath, bool isFullCopy)
 		{
+			// CHANGE CODE HERE
+			// WORKING HERE
+
 			StreamWriter fileStream = null;
 
 			bool databaseFileExistedAlready = databaseFile.Exists;
@@ -127,30 +132,28 @@ namespace hlback.FileManagement
 		} // end addDatabaseRecord()
 
 
-		private string getLinkFilePath(FileInfo databaseFile)
+		private string getLinkFilePath(DirectoryInfo databaseRecordLocation)
 		{
-			// ADD CODE HERRE
+			// ADD CODE HERE
 			//if (!databaseFile.Exists)
 				return null;
 		} // end getLinkFilePath()
 
 
-		private FileInfo getDatabaseFileForHash(string hash, DirectoryInfo databaseDirectory)
+		private DirectoryInfo getDatabaseRecordLocationForHash(string hash, DirectoryInfo databaseDirectory)
 		{
-			int i;
-			DirectoryInfo pathCrawler;
-			string databaseFilePath = databaseDirectory.FullName;
-			for (i = 0; i < hash.Length - 1; i++)
+			DirectoryInfo locationCrawler = databaseDirectory;
+			string databaseRecordLocationPath = databaseDirectory.FullName;
+			for (int i = 0; i < hash.Length; i++)
 			{
-				databaseFilePath = Path.Combine(databaseFilePath, hash[i].ToString());
-				pathCrawler = new DirectoryInfo(databaseFilePath);
-				if (!pathCrawler.Exists)
-					pathCrawler.Create();
+				databaseRecordLocationPath = Path.Combine(databaseRecordLocationPath, hash[i].ToString());
+				locationCrawler = new DirectoryInfo(databaseRecordLocationPath);
+				if (!locationCrawler.Exists)
+					locationCrawler.Create();
 			}
-			databaseFilePath = Path.Combine(databaseFilePath, hash[i].ToString());
 
-			return new FileInfo(databaseFilePath);
-		} // end getDatabaseFileForHash()
+			return locationCrawler;
+		} // end getDatabaseLocationForHash()
 
 
 		private string getHash(FileInfo file)
