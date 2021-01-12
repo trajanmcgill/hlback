@@ -106,34 +106,29 @@ namespace hlback.FileManagement
 
 		private void addDatabaseRecord(DirectoryInfo databaseRecordLocation, string backupTimeString, string newFilePath, bool isFullCopy)
 		{
-			// CHANGE CODE HERE
-			// WORKING HERE
-
-			StreamWriter fileStream = null;
-
-			bool databaseFileExistedAlready = databaseFile.Exists;
-			
-			try
-			{
-				// Create or open database file.
-				if (!databaseFileExistedAlready)
-					fileStream = databaseFile.CreateText();
-				else
-					fileStream = new StreamWriter(databaseFile.FullName, true, DatabaseFileEncoding);
-				
-				// Write new record, consisting of the path where the new file was copied.
-				// The first record of the file and the first record after an empty line correspond to full copies.
-				// Hard links are recorded as new paths following immediately on the next line after the last record.
-				if (isFullCopy && databaseFileExistedAlready)
-					fileStream.WriteLine((string)null);
-				fileStream.WriteLine(newFilePath);
-			}
-			finally { fileStream?.Dispose(); }
+			string recordFileName = backupTimeString + (isFullCopy ? ".full" : ".link");
+			using(StreamWriter fileStream = new StreamWriter(Path.Combine(databaseRecordLocation.FullName, recordFileName), false, DatabaseFileEncoding))
+			{	fileStream.WriteLine(newFilePath);	}
 		} // end addDatabaseRecord()
 
 
 		private string getLinkFilePath(DirectoryInfo databaseRecordLocation)
 		{
+			// remember to check max links per file is greater than 0 before doing any searching for link sources.
+
+			// Each record of a previously backed-up file with a hash identical to this one is represented in the database directory
+			// by a file with a timestamp name and a .full or .link extension.
+			// Get all the matching records, put them in newest-to-oldest order, and then:
+			// 1) Grab the newest one, with the expectation it refers to a file we can use to make a hardlink from.
+			// 2) Iterate down the list until finding the ...checking that max links per file isn't exceeded, and if so do full copy
+			// ...also then take that first candidate and check it still exists and still has the right hash before returning it.
+			// (if it doesn't, then delete the record corresponding to it? create a new record elsewhere pointing to it? not sure, because
+			// it could be a link and could be a full copy itself)
+			// and this whole process could maybe be shortcutted in some ways like checking size and modification date before re-hashing.
+			IEnumerable<FileInfo> fullCopyRecords = databaseRecordLocation.EnumerateFiles("*.full");
+			IEnumerable<FileInfo> hardLinkRecords = databaseRecordLocation.EnumerateFiles("*.link");
+			List<FileInfo> orderedFileRecords = fullCopyRecords.Concat(hardLinkRecords).OrderByDescending(fileRecord => fileRecord.Name).ToList();
+
 			// ADD CODE HERE
 			//if (!databaseFile.Exists)
 				return null;
