@@ -15,6 +15,8 @@ namespace hlback.FileManagement
 
 		private readonly Configuration.SystemType systemType;
 		private readonly ILinker hardLinker;
+		private readonly int maxHardLinksPerFile;
+		private readonly int maxDaysBeforeNewFullFileCopy;
 
 
 		public BackupProcessor(Configuration configuration)
@@ -24,6 +26,8 @@ namespace hlback.FileManagement
 				hardLinker = new WindowsLinker();
 			else
 				hardLinker = new LinuxLinker();
+			maxHardLinksPerFile = configuration.MaxHardLinksPerFile;
+			maxDaysBeforeNewFullFileCopy = configuration.MaxDaysBeforeNewFullFileCopy;
 		} // end BackupProcessor constructor
 
 
@@ -114,10 +118,33 @@ namespace hlback.FileManagement
 
 		private string getLinkFilePath(DirectoryInfo databaseRecordLocation)
 		{
-			// remember to check max links per file is greater than 0 before doing any searching for link sources.
-
 			// Each record of a previously backed-up file with a hash identical to this one is represented in the database directory
 			// by a file with a timestamp name and a .full or .link extension.
+
+			string linkFilePath;
+
+			// Start by getting a complete list of all files with this hash, and put it in descending order (most recent first).
+			IEnumerable<FileInfo> fullCopyRecords = databaseRecordLocation.EnumerateFiles("*.full");
+			IEnumerable<FileInfo> hardLinkRecords = databaseRecordLocation.EnumerateFiles("*.link");
+			List<FileInfo> orderedFileRecords = fullCopyRecords.Concat(hardLinkRecords).OrderByDescending(fileRecord => fileRecord.Name).ToList();
+
+			// Figure out how many links have been created since the last hard copy.
+			int hardLinkChainLength = 0;
+			if (orderedFileRecords.Count < 1)
+				linkFilePath = null; // There are no files matching this hash at all.
+			else
+			{
+				while (hardLinkChainLength < orderedFileRecords.Count && orderedFileRecords[hardLinkChainLength].Name.EndsWith(".link"))
+					hardLinkChainLength++;
+				// WORKING HERE
+				FileInfo lastFullCopy = orderedFileRecords[hardLinkChainLength];
+				if (!lastFullCopy.Name.EndsWith("full"))
+					throw new ErrorManagement.DatabaseException("Corrupted database record (links recorded): " + lastFullCopy.FullName)
+			}
+
+
+			// remember to check max links per file is greater than 0 before doing any searching for link sources.
+
 			// Get all the matching records, put them in newest-to-oldest order, and then:
 			// 1) Grab the newest one, with the expectation it refers to a file we can use to make a hardlink from.
 			// 2) Iterate down the list until finding the ...checking that max links per file isn't exceeded, and if so do full copy
@@ -125,9 +152,6 @@ namespace hlback.FileManagement
 			// (if it doesn't, then delete the record corresponding to it? create a new record elsewhere pointing to it? not sure, because
 			// it could be a link and could be a full copy itself)
 			// and this whole process could maybe be shortcutted in some ways like checking size and modification date before re-hashing.
-			IEnumerable<FileInfo> fullCopyRecords = databaseRecordLocation.EnumerateFiles("*.full");
-			IEnumerable<FileInfo> hardLinkRecords = databaseRecordLocation.EnumerateFiles("*.link");
-			List<FileInfo> orderedFileRecords = fullCopyRecords.Concat(hardLinkRecords).OrderByDescending(fileRecord => fileRecord.Name).ToList();
 
 			// ADD CODE HERE
 			//if (!databaseFile.Exists)
