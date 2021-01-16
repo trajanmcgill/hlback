@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using hlback.FileManagement;
 
 namespace hlback
@@ -10,12 +11,15 @@ namespace hlback
 
         static void Main(string[] args)
         {
-            Console.WriteLine("Starting.");
+			Console.WriteLine("Starting.");
 			Configuration config = new Configuration(MaxHardLinksPerFile, MaxDaysBeforeNewFullFileCopy);
-			BackupProcessor backupProcessor = new BackupProcessor(config);
-			backupProcessor.makeEntireBackup(
-                "/home/trajan/Documents/development/backupTestSource",
-                "/home/trajan/Documents/development/backupTestDestinationRoot");
-        }
-    }
+
+			string backupSourcePath = Path.Combine(Directory.GetCurrentDirectory(), "testSource"); // CHANGE CODE HERE
+			string backupDestinationRootPath = Path.Combine(Directory.GetCurrentDirectory(), "testDestination"); // CHANGE CODE HERE
+
+			BackupProcessor backupProcessor = new BackupProcessor(config, backupSourcePath, backupDestinationRootPath);
+			backupProcessor.doBackup();
+        } // end Main()
+
+    } // end class Program
 }

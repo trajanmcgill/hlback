@@ -1,5 +1,4 @@
 using System;
-using System.Text;
 using System.IO;
 using System.Collections.Generic;
 using System.Linq;
@@ -9,17 +8,12 @@ namespace hlback.FileManagement
 {
 	class BackupProcessor
 	{
-		private const int HashLength = 40;
-		private const int DatabaseFilePathLength = (HashLength - 1) * 2 + 1;
-		private readonly Encoding DatabaseFileEncoding = Encoding.UTF8;
-
 		private readonly Configuration.SystemType systemType;
 		private readonly ILinker hardLinker;
-		private readonly int maxHardLinksPerFile;
-		private readonly int maxDaysBeforeNewFullFileCopy;
+		private readonly int maxHardLinksPerFile, maxDaysBeforeNewFullFileCopy;
+		private readonly string sourceRootPath, backupsRootPath;
 
-
-		public BackupProcessor(Configuration configuration)
+		public BackupProcessor(Configuration configuration, string sourcePath, string backupsRootPath)
 		{
 			systemType = configuration.systemType;
 			if (systemType == Configuration.SystemType.Windows)
@@ -28,24 +22,23 @@ namespace hlback.FileManagement
 				hardLinker = new LinuxLinker();
 			maxHardLinksPerFile = configuration.MaxHardLinksPerFile;
 			maxDaysBeforeNewFullFileCopy = configuration.MaxDaysBeforeNewFullFileCopy;
+			sourceRootPath = sourcePath;
+			this.backupsRootPath = backupsRootPath;
 		} // end BackupProcessor constructor
 
 
-		public void makeEntireBackup(string sourcePath, string backupsRootPath)
+		public void doBackup()
 		{
+			// Get the backups root directory and get or create the backups database at that location.
 			DirectoryInfo backupsRootDirectory = new DirectoryInfo(backupsRootPath);
+			Database database = new Database(backupsRootPath);
 
-			// Check for a backups database at the destination.
-			DirectoryInfo databaseDirectory = new DirectoryInfo(Path.Combine(backupsRootPath, ".hlbackdatabase"));
-			if (!databaseDirectory.Exists)
-				databaseDirectory.Create();
-
-			// Create subdirectory for the new backup.
-			DirectoryInfo subDirectory = createBackupTimeSubdirectory(backupsRootDirectory);
-			string backupTimeString = subDirectory.Name;
+			// Create subdirectory for this new backup.
+			DirectoryInfo destinationBaseDirectory = createBackupTimeSubdirectory(backupsRootDirectory);
+			string backupTimeString = destinationBaseDirectory.Name;
 
 			// Copy all the files.
-			makeFolderTreeBackup(new DirectoryInfo(sourcePath), subDirectory, databaseDirectory, backupTimeString);
+			makeFolderTreeBackup(new DirectoryInfo(sourceRootPath), destinationBaseDirectory, destinationBaseDirectory, database, backupTimeString);
 		} // end makeEntireBackup()
 
 
@@ -67,31 +60,29 @@ namespace hlback.FileManagement
 		} // end createBackupTimeSubdirectory()
 
 
-		private void makeFolderTreeBackup(DirectoryInfo sourceDirectory, DirectoryInfo destinationDirectory, DirectoryInfo databaseDirectory, string backupTimeString)
+		private void makeFolderTreeBackup(
+			DirectoryInfo sourceDirectory, DirectoryInfo destinationBaseDirectory,
+			DirectoryInfo destinationCurrentDirectory, Database database, string backupTimeString)
 		{
 			// Recurse through subdirectories, copying each one.
 			foreach (DirectoryInfo individualDirectory in sourceDirectory.EnumerateDirectories())
 			{
-				DirectoryInfo destinationSubDirectory = destinationDirectory.CreateSubdirectory(individualDirectory.Name);
-				makeFolderTreeBackup(individualDirectory, destinationSubDirectory, databaseDirectory, backupTimeString);
+				DirectoryInfo destinationSubDirectory = destinationCurrentDirectory.CreateSubdirectory(individualDirectory.Name);
+				makeFolderTreeBackup(individualDirectory, destinationBaseDirectory, destinationSubDirectory, database, backupTimeString);
 			}
 
 			// Back up the files in this directory.
 			foreach (FileInfo individualFile in sourceDirectory.EnumerateFiles())
 			{
-				// Calculate a hash of the file to be backed up.
-				string fileHash = getHash(individualFile);
-
 				// Figure out the backup destination for the current file.
-				string destinationFilePath = Path.Combine(destinationDirectory.FullName, individualFile.Name);
+				string destinationFilePath = Path.Combine(destinationCurrentDirectory.FullName, individualFile.Name);
 
-				// Get a DirectoryInfo object corresponding to a records location for that hash in the backups database.
-				DirectoryInfo databaseRecordLocation = getDatabaseRecordLocationForHash(fileHash, databaseDirectory);
-
+				// Look in the database and find an existing, previously backed up file to create a hard link to,
+				// if any exists within the current run's rules for using links.
+				FileRecordMatchInfo destinationFileRecordInfo = database.getMatchingFileRecordInfo(individualFile);
 
 				// Make a full copy of the file if needed, but otherwise create a hard link from a previous backup
-				string linkFilePath = getLinkFilePath(databaseRecordLocation);
-				if (linkFilePath == null)
+				if (destinationFileRecordInfo.hardLinkTarget == null)
 				{
 					Console.WriteLine($"Copying {individualFile.FullName}");
 					Console.WriteLine($"    to {destinationFilePath}");
@@ -99,90 +90,16 @@ namespace hlback.FileManagement
 				}
 				else
 				{
+					string linkFilePath = destinationFileRecordInfo.hardLinkTarget.FullName;
 					Console.WriteLine($"Linking {linkFilePath}");
 					Console.WriteLine($"    to {destinationFilePath}");
 					hardLinker.createHardLink(destinationFilePath, linkFilePath);
 				}
-				addDatabaseRecord(databaseRecordLocation, backupTimeString, destinationFilePath, (linkFilePath == null));
+
+				// Record in the backups database the new copy or link that was made.
+				database.addRecord(destinationBaseDirectory, destinationFilePath, destinationFileRecordInfo);
 			}
 		} // end makeFolderTreeBackup()
-
-
-		private void addDatabaseRecord(DirectoryInfo databaseRecordLocation, string backupTimeString, string newFilePath, bool isFullCopy)
-		{
-			string recordFileName = backupTimeString + (isFullCopy ? ".full" : ".link");
-			using(StreamWriter fileStream = new StreamWriter(Path.Combine(databaseRecordLocation.FullName, recordFileName), false, DatabaseFileEncoding))
-			{	fileStream.WriteLine(newFilePath);	}
-		} // end addDatabaseRecord()
-
-
-		private string getLinkFilePath(DirectoryInfo databaseRecordLocation)
-		{
-			// Each record of a previously backed-up file with a hash identical to this one is represented in the database directory
-			// by a file with a timestamp name and a .full or .link extension.
-
-			string linkFilePath;
-
-			// Start by getting a complete list of all files with this hash, and put it in descending order (most recent first).
-			IEnumerable<FileInfo> fullCopyRecords = databaseRecordLocation.EnumerateFiles("*.full");
-			IEnumerable<FileInfo> hardLinkRecords = databaseRecordLocation.EnumerateFiles("*.link");
-			List<FileInfo> orderedFileRecords = fullCopyRecords.Concat(hardLinkRecords).OrderByDescending(fileRecord => fileRecord.Name).ToList();
-
-			// Figure out how many links have been created since the last hard copy.
-			int hardLinkChainLength = 0;
-			if (orderedFileRecords.Count < 1)
-				linkFilePath = null; // There are no files matching this hash at all.
-			else
-			{
-				while (hardLinkChainLength < orderedFileRecords.Count && orderedFileRecords[hardLinkChainLength].Name.EndsWith(".link"))
-					hardLinkChainLength++;
-				// WORKING HERE
-				FileInfo lastFullCopy = orderedFileRecords[hardLinkChainLength];
-				if (!lastFullCopy.Name.EndsWith("full"))
-					throw new ErrorManagement.DatabaseException("Corrupted database record (links recorded): " + lastFullCopy.FullName)
-			}
-
-
-			// remember to check max links per file is greater than 0 before doing any searching for link sources.
-
-			// Get all the matching records, put them in newest-to-oldest order, and then:
-			// 1) Grab the newest one, with the expectation it refers to a file we can use to make a hardlink from.
-			// 2) Iterate down the list until finding the ...checking that max links per file isn't exceeded, and if so do full copy
-			// ...also then take that first candidate and check it still exists and still has the right hash before returning it.
-			// (if it doesn't, then delete the record corresponding to it? create a new record elsewhere pointing to it? not sure, because
-			// it could be a link and could be a full copy itself)
-			// and this whole process could maybe be shortcutted in some ways like checking size and modification date before re-hashing.
-
-			// ADD CODE HERE
-			//if (!databaseFile.Exists)
-				return null;
-		} // end getLinkFilePath()
-
-
-		private DirectoryInfo getDatabaseRecordLocationForHash(string hash, DirectoryInfo databaseDirectory)
-		{
-			DirectoryInfo locationCrawler = databaseDirectory;
-			string databaseRecordLocationPath = databaseDirectory.FullName;
-			for (int i = 0; i < hash.Length; i++)
-			{
-				databaseRecordLocationPath = Path.Combine(databaseRecordLocationPath, hash[i].ToString());
-				locationCrawler = new DirectoryInfo(databaseRecordLocationPath);
-				if (!locationCrawler.Exists)
-					locationCrawler.Create();
-			}
-
-			return locationCrawler;
-		} // end getDatabaseLocationForHash()
-
-
-		private string getHash(FileInfo file)
-		{
-			using(SHA1 hasher = SHA1.Create())
-			using(FileStream stream = file.Open(FileMode.Open, FileAccess.Read))
-			{
-				return BitConverter.ToString(hasher.ComputeHash(stream)).Replace("-", "").ToLower();
-			}
-		} // end getHash()
 
 
 		private DirectoryInfo createSubDirectory(DirectoryInfo baseDirectory, string subDirectoryName)
