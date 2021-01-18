@@ -7,11 +7,11 @@ namespace hlback
 	{
 		public enum SystemType { Linux, Windows };
 
-		public readonly int MaxHardLinksPerFile;
-		public readonly int MaxDaysBeforeNewFullFileCopy;
+		public readonly int? MaxHardLinksPerFile;
+		public readonly int? MaxDaysBeforeNewFullFileCopy;
 
 
-		public Configuration(int maxHardLinksPerFile, int maxDaysBeforeNewFullFileCopy)
+		public Configuration(int? maxHardLinksPerFile, int? maxDaysBeforeNewFullFileCopy)
 		{
 			MaxHardLinksPerFile = maxHardLinksPerFile;
 			MaxDaysBeforeNewFullFileCopy = maxDaysBeforeNewFullFileCopy;

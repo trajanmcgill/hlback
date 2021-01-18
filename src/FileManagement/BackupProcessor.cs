@@ -8,9 +8,12 @@ namespace hlback.FileManagement
 {
 	class BackupProcessor
 	{
+		private const string TimestampDirectoryCreationPattern = "yyyy-MM-dd.HH-mm-ss.fff";
+
 		private readonly Configuration.SystemType systemType;
 		private readonly ILinker hardLinker;
-		private readonly int maxHardLinksPerFile, maxDaysBeforeNewFullFileCopy;
+		private readonly int? maxHardLinksPerFile;
+		private readonly int? maxDaysBeforeNewFullFileCopy;
 		private readonly string sourceRootPath, backupsRootPath;
 
 		public BackupProcessor(Configuration configuration, string sourcePath, string backupsRootPath)
@@ -51,7 +54,7 @@ namespace hlback.FileManagement
 			DirectoryInfo subDirectory = null;
 			while(subDirectory == null)
 			{
-				backupDestinationSubDirectoryName = DateTime.Now.ToString("yyyy-MM-dd.HH-mm-ss.fff");
+				backupDestinationSubDirectoryName = DateTime.Now.ToString(TimestampDirectoryCreationPattern);
 				subDirectory = createSubDirectory(baseDirectory, backupDestinationSubDirectoryName);
 				if (subDirectory == null)
 					System.Threading.Thread.Sleep(1);
@@ -79,7 +82,7 @@ namespace hlback.FileManagement
 
 				// Look in the database and find an existing, previously backed up file to create a hard link to,
 				// if any exists within the current run's rules for using links.
-				FileRecordMatchInfo destinationFileRecordInfo = database.getMatchingFileRecordInfo(individualFile);
+				FileRecordMatchInfo destinationFileRecordInfo = database.getMatchingFileRecordInfo(individualFile, maxHardLinksPerFile, maxDaysBeforeNewFullFileCopy);
 
 				// Make a full copy of the file if needed, but otherwise create a hard link from a previous backup
 				if (destinationFileRecordInfo.hardLinkTarget == null)
