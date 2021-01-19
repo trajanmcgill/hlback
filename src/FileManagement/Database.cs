@@ -16,19 +16,19 @@ namespace hlback.FileManagement
 		private const int TimeStampREGroup_Year = 1, TimeStampREGroup_Month = 2, TimeStampREGroup_Day = 3,
 			TimeStampREGroup_Hour = 4, TimeStampREGroup_Minute = 5, TimeStampREGroup_Second = 6, TimeStampREGroup_Millisecond = 7; 
 
-		//private const int HashLength = 40;
-		//private const int DatabaseFilePathLength = (HashLength - 1) * 2 + 1;
 		private const string DatabaseDirectoryName = ".hlbackdatabase";
 		private readonly Encoding DatabaseFileEncoding = Encoding.UTF8;
+		
 		private readonly int HashLength;
-
 		private readonly DirectoryInfo databaseDirectory;
+		private readonly ConsoleOutput userInterface;
 
 
-		public Database(string backupsRootPath)
+		public Database(string backupsRootPath, ConsoleOutput userInterface)
 		{
 			HashLength = getHash("hashtest").Length;
 			databaseDirectory = new DirectoryInfo(Path.Combine(backupsRootPath, DatabaseDirectoryName));
+			this.userInterface = userInterface;
 		} // end Database constructor
 
 
@@ -36,6 +36,7 @@ namespace hlback.FileManagement
 		{
 			// Get the hash of the origin file.
 			string originFileHash = getHash(originFile);
+			userInterface.report($"getMatchingFileRecordInfo: searcing for existing physical copies of {originFile.FullName} [hash={originFileHash}]", ConsoleOutput.Verbosity.DebugEvents);
 
 			// Get the base location of the database records for the current file hash.
 			DirectoryInfo baseRecordsLocation = getDatabaseLocationForHash(originFileHash);
@@ -78,7 +79,7 @@ namespace hlback.FileManagement
 							break;
 						}
 						else
-							Console.WriteLine("Maximum links per file reached. Going to create a full copy.");
+							userInterface.report(1, $"Maximum hardlinks per physical copy reached. Will need to create a full copy of {originFile.FullName}.", ConsoleOutput.Verbosity.DebugEvents);
 					}
 
 					// Quit looping and looking for a link to use if one has already been found.
@@ -90,14 +91,13 @@ namespace hlback.FileManagement
 				}
 			} // end if (baseRecordsLocation.Exists)
 
-			Console.WriteLine($"Tried finding database record match on hash {originFileHash}");
 			if (hardLinkTarget != null)
 			{
-				Console.WriteLine($"   Found existing file to link to: {hardLinkTarget.FullName}");
-				Console.WriteLine($"   In database record group stored at: {databaseRecordGroupPath}");
+				userInterface.report(1, $"Found existing file to link to: {hardLinkTarget.FullName}", ConsoleOutput.Verbosity.DebugEvents);
+				userInterface.report(1, $"In database record group stored at: {databaseRecordGroupPath}", ConsoleOutput.Verbosity.DebugEvents);
 			}
 			else
-				Console.WriteLine($"    No existing file found to link to in database records directory {baseRecordsLocation.FullName}");
+				userInterface.report(1, $"No existing file found to link to in database records directory {baseRecordsLocation.FullName}", ConsoleOutput.Verbosity.DebugEvents);
 
 			return new FileRecordMatchInfo(originFileHash, baseRecordsLocation.FullName, databaseRecordGroupPath, hardLinkTarget);
 		} // end getMatchingFileRecordInfo()
@@ -114,8 +114,8 @@ namespace hlback.FileManagement
 				??
 				Path.Combine(matchingFileRecord.databaseRecordBasePath, destinationBaseDirectory.Name));
 
-			Console.WriteLine($"Adding database record at {directoryForNewRecord.FullName}");
-			Console.WriteLine($"    Record contents: {fullDestinationFilePath}");
+			userInterface.report($"Adding database record at {directoryForNewRecord.FullName}", ConsoleOutput.Verbosity.DebugEvents);
+			userInterface.report(1, $"Record contents: {fullDestinationFilePath}", ConsoleOutput.Verbosity.DebugEvents);
 
 			// If the directory for the new record doesn't already exist, create it.
 			if (!directoryForNewRecord.Exists)
@@ -143,8 +143,6 @@ namespace hlback.FileManagement
 
 			int age = (int)(DateTime.Now.Subtract(timestampTime).TotalDays);
 
-			Console.WriteLine($"Checked age on {timestampString} and result was {age}");
-
 			return age;
 		} // end getAgeFromTimestampString()
 
@@ -153,12 +151,7 @@ namespace hlback.FileManagement
 		{
 			FileInfo targetFile = null;
 			using(StreamReader reader = new StreamReader(databaseRecord.FullName, DatabaseFileEncoding))
-			{
-				targetFile = new FileInfo(reader.ReadToEnd());
-			}
-
-			Console.WriteLine($"Read target file from database record at {databaseRecord.FullName}");
-			Console.WriteLine($"    Value found was {targetFile.FullName}");
+			{	targetFile = new FileInfo(reader.ReadToEnd());	}
 
 			return targetFile;
 		} // end getTargetFileFromDatabaseRecord()
@@ -168,7 +161,7 @@ namespace hlback.FileManagement
 		{
 			// ADD CODE HERE: consider checking file size or even allowing rehashing.
 
-			Console.WriteLine($"Validity = {link.Exists} for file {link.FullName}");
+			//Console.WriteLine($"Validity = {link.Exists} for file {link.FullName}");
 
 			return link.Exists;
 		} // end fileIsStillValid()
@@ -208,8 +201,6 @@ namespace hlback.FileManagement
 			for(int i = 0; i < hash.Length; i++)
 				locationPath.Append(Path.DirectorySeparatorChar).Append(hash[i]);
 			DirectoryInfo databaseLocation = new DirectoryInfo(locationPath.ToString());
-
-			Console.WriteLine($"Database location for hash {hash} is {databaseLocation.FullName}");
 
 			return databaseLocation;
 		} // end getDatabaseLocationForHash()
