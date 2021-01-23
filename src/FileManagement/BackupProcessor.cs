@@ -134,10 +134,10 @@ namespace hlback.FileManagement
 
 				// Look in the database and find an existing, previously backed up file to create a hard link to,
 				// if any exists within the current run's rules for using links.
-				FileRecordMatchInfo destinationFileRecordInfo = database.getMatchingFileRecordInfo(individualFile, maxHardLinksPerFile, maxDaysBeforeNewFullFileCopy);
+				DatabaseQueryResults databaseInfoForFile = database.getDatabaseInfoForFile(individualFile, destinationBaseDirectory.Name, maxHardLinksPerFile, maxDaysBeforeNewFullFileCopy);
 
 				// Make a full copy of the file if needed, but otherwise create a hard link from a previous backup
-				if (destinationFileRecordInfo.hardLinkTarget == null)
+				if (databaseInfoForFile.bestHardLinkTarget == null)
 				{
 					userInterface.report(1, $"Backing up file {individualFile.Name} to {destinationFilePath} [copying]", ConsoleOutput.Verbosity.LowImportanceEvents);
 					individualFile.CopyTo(destinationFilePath);
@@ -146,7 +146,7 @@ namespace hlback.FileManagement
 				}
 				else
 				{
-					string linkFilePath = destinationFileRecordInfo.hardLinkTarget.FullName;
+					string linkFilePath = databaseInfoForFile.bestHardLinkTarget.FullName;
 					userInterface.report(1, $"Backing up file {individualFile.Name} to {destinationFilePath} [identical existing file found; creating hardlink to {linkFilePath}]", ConsoleOutput.Verbosity.LowImportanceEvents);
 					hardLinker.createHardLink(destinationFilePath, linkFilePath);
 				}
@@ -154,7 +154,7 @@ namespace hlback.FileManagement
 				completedSizeInfo.byteCount_All += individualFile.Length;
 
 				// Record in the backups database the new copy or link that was made.
-				database.addRecord(destinationBaseDirectory, destinationFilePath, destinationFileRecordInfo);
+				database.addRecord(destinationBaseDirectory, destinationFilePath, databaseInfoForFile);
 			}
 
 			// Recurse through subdirectories, copying each one.
