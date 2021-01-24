@@ -10,6 +10,14 @@ namespace hlback.FileManagement
 {
 	class Database
 	{
+		private enum DatabaseRecordFileValidity
+		{
+			Invalid,
+			Nonmatch,
+			ValidMatch
+		}
+
+
 		private const string TimestampFileNameCreationPattern = "yyyy-MM-dd.HH-mm-ss.fff";
 		private const string TimestampFileNameFindPattern =     "????-??-??.??-??-??.???.*";
 		private const string TimestameFileNameFindPatternRE =  @"^(\d\d\d\d)-(\d\d)-(\d\d)\.(\d\d)-(\d\d)-(\d\d)\.(\d\d\d).(\d?)$";
@@ -32,138 +40,159 @@ namespace hlback.FileManagement
 			this.userInterface = userInterface;
 		} // end Database constructor
 
-
-		public DatabaseQueryResults getDatabaseInfoForFile(FileInfo originFile, string currentBackupTimestampString, int? maxHardLinksPerFile, int? maxDaysBeforeNewFullFileCopy)
+		
+		public DatabaseQueryResults getDatabaseInfoForFile(FileInfo originFile, int? maxHardLinksPerFile, int? maxDataAgeForNewHardLink_Days, string currentBackupTimestampString)
 		{
-			FileInfo bestHardLinkTarget;
 			string newRecordPath, newRecordFileName;
+			(FileInfo targetFile, DirectoryInfo databaseRecordGroup) bestHardLinkTarget;
 
-			// Get the hash of the origin file.
+			// Hash the origin file, and find out the base location for database records for files with this hash.
 			string originFileHash = getHash(originFile);
-			userInterface.report($"getMatchingFileRecordInfo: searcing for existing physical copies of {originFile.FullName} [hash={originFileHash}]", ConsoleOutput.Verbosity.DebugEvents);
+			DirectoryInfo recordsBaseDirectory = getDatabaseLocationForHash(originFileHash);
 
-			// Get the base location of the database records for the current file hash.
-			DirectoryInfo baseRecordsLocation = getDatabaseLocationForHash(originFileHash);
+			// Determine if there is an existing database record for a file that can be used as a hard link for the origin file.
+			bestHardLinkTarget = getAvailableHardLinkTarget(originFile, recordsBaseDirectory, maxHardLinksPerFile, maxDataAgeForNewHardLink_Days);
+			
+			// Determine where the new database record file would be placed to record a backup of the origin file,
+			// and what that record file should be named so as to be unique.
+			newRecordPath = bestHardLinkTarget.databaseRecordGroup?.FullName ?? getNextUnusedDatabaseRecordPath(recordsBaseDirectory, currentBackupTimestampString);
+			newRecordFileName = getNextUnusedDatabaseRecordFileName(recordsBaseDirectory, currentBackupTimestampString);
 
-			// Figure out what the record filename will be if a new record is created for this file.
-			int newRecordFileNameCounter;
-			if (!baseRecordsLocation.Exists)
-				newRecordFileNameCounter = 0;
-			else
+			return new DatabaseQueryResults(newRecordPath, newRecordFileName, bestHardLinkTarget.targetFile);
+		} // end getDatabaseInfoForFile()
+
+
+		private (FileInfo targetFile, DirectoryInfo databaseRecordGroup)
+			getAvailableHardLinkTarget(FileInfo originFile, DirectoryInfo recordsBaseDirectory, int? maxHardLinksPerFile, int? maxDataAgeForNewHardLink_Days)
+		{
+			FileInfo bestHardLinkTarget = null;
+			DirectoryInfo hardLinkDatabaseRecordGroup = null;
+
+			// Only bother to search for a matching hard link target if there are any records of existing matching files to hard link from,
+			// and hard links are allowed in the current configuration.
+			if (recordsBaseDirectory.Exists && maxHardLinksPerFile > 0)
 			{
-				IEnumerable<FileInfo> existingRecordsWithThisTimestamp =
-					baseRecordsLocation
-						.EnumerateFiles(TimestampFileNameFindPattern, SearchOption.AllDirectories)
-						.Where(file => file.Name.Substring(0, currentBackupTimestampString.Length) == currentBackupTimestampString);
-				if (existingRecordsWithThisTimestamp.Any())
-					newRecordFileNameCounter = (existingRecordsWithThisTimestamp.Max(file => getCounterFromTimestampName(file.Name)) + 1);
-				else
-					newRecordFileNameCounter = 0;
-			}
-			newRecordFileName = currentBackupTimestampString + "." + newRecordFileNameCounter.ToString();
-
-			// Figure out if there is a database record of a matching file from which we can create a hard link.
-			bestHardLinkTarget = null;
-			newRecordPath = null;
-			if (!baseRecordsLocation.Exists)
-				newRecordPath = currentBackupTimestampString + ".0";
-			else
-			{
-				// Get all database record groups (each group of hard link records corresponding to a single full copy)
+				// Get all database record groups (each group of hard link records that correespond to a single full physical copy)
 				// that were created within the maximum time window allowed (if there are any).
-				IEnumerable<DirectoryInfo> candidateRecordGroups =
-					baseRecordsLocation
-						.EnumerateDirectories(TimestampFileNameFindPattern)
-						.Where(directory => (maxDaysBeforeNewFullFileCopy == null || getAgeFromTimestampName(directory.Name) <= maxDaysBeforeNewFullFileCopy));
-				
 				// For each matching group of hard links, in order from oldest to newest, search for a group having under the max allowed number of hard links.
-				// In the process, verify each recorded link still is valid, and delete records for those that do not.
-				// If a group with room for more hard links exists, return one of the existing links as the match to create another link from.
+				// In the process, verify each recorded link is valid, and delete records for those that are not.
+				// Also check whether links in each group match the file under consideration.
+				// If a matching group with room for more hard links exists, return one of its existing links as the match to create another link from.
 				IOrderedEnumerable<DirectoryInfo> orderedCandidateRecordGroups =
-					candidateRecordGroups
+					recordsBaseDirectory
+						.EnumerateDirectories(TimestampFileNameFindPattern)
+						.Where(directory => (maxDataAgeForNewHardLink_Days == null || getAgeFromTimestampName(directory.Name) <= maxDataAgeForNewHardLink_Days))
 						.OrderByDescending(directory => getAgeFromTimestampName(directory.Name))
 						.ThenBy(directory => getCounterFromTimestampName(directory.Name));
 				foreach(DirectoryInfo recordGroup in orderedCandidateRecordGroups)
 				{
 					List<FileInfo> linksInThisGroup = recordGroup.EnumerateFiles().ToList();
-					int numValidLinks = linksInThisGroup.Count;
+					
+					int numLinksInThisGroup = linksInThisGroup.Count;
+
+					FileInfo lastValidPotentialTarget = null;
 					foreach(FileInfo linkRecord in linksInThisGroup)
 					{
-						FileInfo targetFile = getTargetFileFromDatabaseRecord(linkRecord);
-						if (!fileIsStillValid(targetFile))
+						FileInfo potentialTargetFile = getTargetFileFromDatabaseRecord(linkRecord);
+						DatabaseRecordFileValidity oldBackupFileMatchValidity = checkOldBackupFile(potentialTargetFile, originFile.Length, originFile.LastWriteTime);
+						if (oldBackupFileMatchValidity == DatabaseRecordFileValidity.ValidMatch)
 						{
-							// The file referred to by this database record no longer exists.
-							// Delete the record, and reduce the count of valid links in this group.
-							linkRecord.Delete();
-							numValidLinks--;
+							// Database record points to a valid, matching previous backup file.
+							// If we haven't hit the max hard links allowed per physical copy, break out and stop looking for a link source.
+							lastValidPotentialTarget = potentialTargetFile;
+							if (numLinksInThisGroup < maxHardLinksPerFile)
+								break;
 						}
-						else if (maxHardLinksPerFile == null || numValidLinks < maxHardLinksPerFile)
+						else if (oldBackupFileMatchValidity == DatabaseRecordFileValidity.Invalid)
 						{
-							// Record does point to a valid file that still exists, and the total number of hard links recorded in this group
-							// is under the maximum allowed, so use this one and go no further.
-							bestHardLinkTarget = targetFile;
-							break;
+							// The file referred to by this database record no longer exists or has been modified and doesn't match its hash anymore.
+							// This database record is no longer valid, so delete the record, and reduce the count of valid links in this group.
+							linkRecord.Delete();
+							numLinksInThisGroup--;
 						}
 						else
-							userInterface.report(1, $"Maximum hardlinks per physical copy reached. Will need to create a full copy of {originFile.FullName}.", ConsoleOutput.Verbosity.DebugEvents);
-					}
+						{
+							// Something about the file pointed to in this record doesn't match the origin file (e.g., last modified date).
+							// Can't use this one (or others that are hard links of the same physical file) as a hard link source.
+							// Stop looking at records in this group of identical hard links and move on to the next group.
+							break;
+						}
+					} // end foreach(FileInfo linkRecord in linksInThisGroup)
 
-					// Quit looping and looking for a link to use if one has already been found.
-					if (bestHardLinkTarget != null)
+					if (lastValidPotentialTarget != null && numLinksInThisGroup < maxHardLinksPerFile)
 					{
-						newRecordPath = bestHardLinkTarget.Directory.FullName;
+						// A usable record has been found in this group, and the total number of hard links recorded in this group
+						// is under the maximum allowed, so use this one and go no further.
+						bestHardLinkTarget = lastValidPotentialTarget;
+						hardLinkDatabaseRecordGroup = recordGroup;
 						break;
 					}
-				}
-			} // end if (baseRecordsLocation.Exists)
+				} // end foreach(DirectoryInfo recordGroup in orderedCandidateRecordGroups)
+			} // end if (recordsBaseDirectory.Exists && maxHardLinksPerFile > 0)
+			
+			return (bestHardLinkTarget, hardLinkDatabaseRecordGroup);
+		} // end getAvailableHardLinkTarget()
 
-			if (newRecordPath == null)
+
+		private string getNextUnusedDatabaseRecordPath(DirectoryInfo recordsBaseDirectory, string currentBackupTimestampString)
+		{
+			int newGroupNameCounter;
+
+			if (!recordsBaseDirectory.Exists)
+				newGroupNameCounter = 0;
+			else
 			{
-				// No usable file found to create a hard link from. Backing up the file being looked up requires a new full copy, which requires a new link record group.
-				// Build the name/path of that new group.
-				userInterface.report(1, $"No existing file found to link to in database records directory {baseRecordsLocation.FullName}", ConsoleOutput.Verbosity.DebugEvents);
 				IEnumerable<DirectoryInfo> existingGroupsWithThisTimestamp =
-					baseRecordsLocation
+					recordsBaseDirectory
 						.EnumerateDirectories(TimestampFileNameFindPattern)
 						.Where(directory => directory.Name.Substring(0, currentBackupTimestampString.Length) == currentBackupTimestampString);
-				int newGroupNameCounter;
 				if (existingGroupsWithThisTimestamp.Any())
-					newGroupNameCounter = (existingGroupsWithThisTimestamp.Max(file => getCounterFromTimestampName(file.Name)) + 1);
+					newGroupNameCounter = (existingGroupsWithThisTimestamp.Max(groupDirectory => (getCounterFromTimestampName(groupDirectory.Name)) + 1));
 				else
 					newGroupNameCounter = 0;
-				newRecordPath = currentBackupTimestampString + "." + newGroupNameCounter.ToString();
 			}
 
-			if (bestHardLinkTarget != null)
-			{
-				// A record was found of a file usable as a hard link target.
-				userInterface.report(1, $"Found existing file to link to: {bestHardLinkTarget.FullName}", ConsoleOutput.Verbosity.DebugEvents);
-				userInterface.report(1, $"In database record group stored at: {newRecordPath}", ConsoleOutput.Verbosity.DebugEvents);
-			}
-
-			return new DatabaseQueryResults(Path.Combine(baseRecordsLocation.FullName, newRecordPath), newRecordFileName, bestHardLinkTarget);
-		} // end getDatabaseInfoForFile()
+			string nextRecordPathRelative = currentBackupTimestampString + "." + newGroupNameCounter.ToString();
+			return Path.Combine(recordsBaseDirectory.FullName, nextRecordPathRelative);
+		} // end getNextUnusedDatabaseRecordPath()
 
 
-		public void addRecord(DirectoryInfo destinationBaseDirectory, string fullDestinationFilePath, DatabaseQueryResults databaseInfoForFile)
+		private string getNextUnusedDatabaseRecordFileName(DirectoryInfo recordsBaseDirectory, string currentBackupTimestampString)
 		{
-			// Construct the location for the record to be saved in.
-			// If there is a known matching existing record group, use its path.
-			// If there is not, create a new one, built from the (previously calculated) base path for a file with this hash
-			// combined with the same name used for the current backup's root directory.
+			int newRecordFileNameCounter;
+
+			if (!recordsBaseDirectory.Exists)
+				newRecordFileNameCounter = 0;
+			else
+			{
+				IEnumerable<FileInfo> existingRecordFilesWithThisTimestamp =
+					recordsBaseDirectory
+						.EnumerateFiles(TimestampFileNameFindPattern, SearchOption.AllDirectories)
+						.Where(file => (file.Name.Substring(0, currentBackupTimestampString.Length) == currentBackupTimestampString));
+				if (existingRecordFilesWithThisTimestamp.Any())
+					newRecordFileNameCounter = (existingRecordFilesWithThisTimestamp.Max(file => (getCounterFromTimestampName(file.Name)) + 1));
+				else
+					newRecordFileNameCounter = 0;
+			}
+
+			return currentBackupTimestampString + "." + newRecordFileNameCounter.ToString();
+		} // end getNextUnusedDatabaseRecordFileName()
+
+
+		public void addRecord(string backedUpFileDestinationPath, DatabaseQueryResults databaseInfoForFile)
+		{
+			// Get an object corresponding to the directory for the new record.
 			DirectoryInfo directoryForNewRecord = new DirectoryInfo(databaseInfoForFile.newRecordFilePath);
-
 			userInterface.report($"Adding database record at {directoryForNewRecord.FullName}", ConsoleOutput.Verbosity.DebugEvents);
-			userInterface.report(1, $"Record contents: {fullDestinationFilePath}", ConsoleOutput.Verbosity.DebugEvents);
-
 			// If the directory for the new record doesn't already exist, create it.
 			if (!directoryForNewRecord.Exists)
 				directoryForNewRecord.Create();
 			
 			// Create a database record file with the same timestamp name as the overall backup,
 			// and write in that file the backup destination path of the file whose backup copy is being recorded.
+			userInterface.report(1, $"Writing record contents: {backedUpFileDestinationPath}", ConsoleOutput.Verbosity.DebugEvents);
 			using(StreamWriter fileStream = new StreamWriter(Path.Combine(databaseInfoForFile.newRecordFilePath, databaseInfoForFile.newRecordFileName), false, DatabaseFileEncoding))
-			{	fileStream.Write(fullDestinationFilePath);	}
+			{	fileStream.Write(backedUpFileDestinationPath);	}
 		} // end addRecord()
 
 
@@ -206,14 +235,17 @@ namespace hlback.FileManagement
 		} // end getTargetFileFromDatabaseRecord()
 
 
-		private bool fileIsStillValid(FileInfo link)
+		private DatabaseRecordFileValidity checkOldBackupFile(FileInfo backupFile, long originFileSize, DateTime originFileLastWriteTime, string previousHash = null)
 		{
-			// ADD CODE HERE: consider checking file size or even allowing rehashing.
-
-			//Console.WriteLine($"Validity = {link.Exists} for file {link.FullName}");
-
-			return link.Exists;
-		} // end fileIsStillValid()
+			if (!backupFile.Exists)
+				return DatabaseRecordFileValidity.Invalid;
+			else if (backupFile.Length != originFileSize || backupFile.LastWriteTime != originFileLastWriteTime)
+				return DatabaseRecordFileValidity.Nonmatch;
+			else if (previousHash != null && previousHash != getHash(backupFile))
+				return DatabaseRecordFileValidity.Nonmatch;
+			else
+				return DatabaseRecordFileValidity.ValidMatch;
+		} // end checkOldBackupFile()
 
 
 		private string normalizeHash(byte[] hashBytes)

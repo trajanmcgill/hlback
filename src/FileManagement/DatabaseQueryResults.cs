@@ -5,8 +5,8 @@ namespace hlback.FileManagement
 {
 	class DatabaseQueryResults
 	{
-		public readonly string newRecordFileName;
 		public readonly string newRecordFilePath;
+		public readonly string newRecordFileName;
 		public readonly FileInfo bestHardLinkTarget;
 
 		public DatabaseQueryResults(string newRecordFilePath, string newRecordFileName, FileInfo bestHardLinkTarget)

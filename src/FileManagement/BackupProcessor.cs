@@ -53,10 +53,7 @@ namespace hlback.FileManagement
 
 			// Copy all the files.
 			DateTime copyStartTime = DateTime.Now;
-			BackupSizeInfo completedBackupSizeInfo =
-				makeFolderTreeBackup(
-					new DirectoryInfo(sourceRootPath), destinationBaseDirectory, destinationBaseDirectory,
-					database, backupTimeString, sourceTreeSizeInfo);
+			BackupSizeInfo completedBackupSizeInfo = makeFolderTreeBackup(new DirectoryInfo(sourceRootPath), destinationBaseDirectory, database, backupTimeString, sourceTreeSizeInfo);
 			DateTime copyEndTime = DateTime.Now;
 
 			
@@ -71,7 +68,7 @@ namespace hlback.FileManagement
 			userInterface.report($"Backup complete.", ConsoleOutput.Verbosity.NormalEvents);
 			userInterface.report(1, $"Copy process duration: {totalTime} seconds.", ConsoleOutput.Verbosity.NormalEvents);
 			userInterface.report(1, $"Total files: {totalFiles} ({copiedFiles} new physical copies needed, {linkedFiles} hardlinks utilized)", ConsoleOutput.Verbosity.NormalEvents);
-			userInterface.report(1, $"Total bytes: {totalBytes} ({copiedBytes} new physically copied, {linkedBytes} hardlinked)", ConsoleOutput.Verbosity.NormalEvents);
+			userInterface.report(1, $"Total bytes: {totalBytes} ({copiedBytes} physically copied, {linkedBytes} hardlinked)", ConsoleOutput.Verbosity.NormalEvents);
 		} // end makeEntireBackup()
 
 
@@ -119,9 +116,8 @@ namespace hlback.FileManagement
 
 
 		private BackupSizeInfo makeFolderTreeBackup(
-			DirectoryInfo sourceDirectory, DirectoryInfo destinationBaseDirectory,
-			DirectoryInfo destinationCurrentDirectory, Database database, string backupTimeString,
-			BackupSizeInfo totalExpectedBackupSize)
+			DirectoryInfo sourceDirectory, DirectoryInfo destinationCurrentDirectory,
+			Database database, string backupTimestampString, BackupSizeInfo totalExpectedBackupSize)
 		{
 			BackupSizeInfo completedSizeInfo = new BackupSizeInfo { fileCount_All = 0, fileCount_Unique = 0, byteCount_All = 0, byteCount_Unique = 0 };
 
@@ -134,7 +130,7 @@ namespace hlback.FileManagement
 
 				// Look in the database and find an existing, previously backed up file to create a hard link to,
 				// if any exists within the current run's rules for using links.
-				DatabaseQueryResults databaseInfoForFile = database.getDatabaseInfoForFile(individualFile, destinationBaseDirectory.Name, maxHardLinksPerFile, maxDaysBeforeNewFullFileCopy);
+				DatabaseQueryResults databaseInfoForFile = database.getDatabaseInfoForFile(individualFile, maxHardLinksPerFile, maxDaysBeforeNewFullFileCopy, backupTimestampString);
 
 				// Make a full copy of the file if needed, but otherwise create a hard link from a previous backup
 				if (databaseInfoForFile.bestHardLinkTarget == null)
@@ -154,7 +150,7 @@ namespace hlback.FileManagement
 				completedSizeInfo.byteCount_All += individualFile.Length;
 
 				// Record in the backups database the new copy or link that was made.
-				database.addRecord(destinationBaseDirectory, destinationFilePath, databaseInfoForFile);
+				database.addRecord(destinationFilePath, databaseInfoForFile);
 			}
 
 			// Recurse through subdirectories, copying each one.
@@ -162,7 +158,7 @@ namespace hlback.FileManagement
 			{
 				DirectoryInfo destinationSubDirectory = destinationCurrentDirectory.CreateSubdirectory(individualDirectory.Name);
 				BackupSizeInfo subDirectoryBackupSizeInfo =
-					makeFolderTreeBackup(individualDirectory, destinationBaseDirectory, destinationSubDirectory, database, backupTimeString, totalExpectedBackupSize);
+					makeFolderTreeBackup(individualDirectory, destinationSubDirectory, database, backupTimestampString, totalExpectedBackupSize);
 				
 				completedSizeInfo.fileCount_All += subDirectoryBackupSizeInfo.fileCount_All;
 				completedSizeInfo.fileCount_Unique += subDirectoryBackupSizeInfo.fileCount_Unique;
