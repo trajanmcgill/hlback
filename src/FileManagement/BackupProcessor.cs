@@ -53,7 +53,8 @@ namespace hlback.FileManagement
 
 			// Copy all the files.
 			DateTime copyStartTime = DateTime.Now;
-			BackupSizeInfo completedBackupSizeInfo = makeFolderTreeBackup(new DirectoryInfo(sourceRootPath), destinationBaseDirectory, database, backupTimeString, sourceTreeSizeInfo);
+			BackupSizeInfo emptyBackupSizeInfo = new BackupSizeInfo { fileCount_All = 0, fileCount_Unique = 0, byteCount_All = 0, byteCount_Unique = 0 };
+			BackupSizeInfo completedBackupSizeInfo = makeFolderTreeBackup(new DirectoryInfo(sourceRootPath), destinationBaseDirectory, database, backupTimeString, sourceTreeSizeInfo, emptyBackupSizeInfo);
 			DateTime copyEndTime = DateTime.Now;
 
 			
@@ -114,13 +115,21 @@ namespace hlback.FileManagement
 			return subDirectory;
 		} // end createBackupTimeSubdirectory()
 
+		
+		private int getCompletionPercentage(long totalBytes, long completedBytes)
+		{
+			return (int)Math.Floor(100 * (decimal)completedBytes / (decimal)totalBytes);
+		} // end completionPercentage()
+
 
 		private BackupSizeInfo makeFolderTreeBackup(
 			DirectoryInfo sourceDirectory, DirectoryInfo destinationCurrentDirectory,
-			Database database, string backupTimestampString, BackupSizeInfo totalExpectedBackupSize)
+			Database database, string backupTimestampString, BackupSizeInfo totalExpectedBackupSize, BackupSizeInfo previouslyCompleteSizeInfo)
 		{
-			BackupSizeInfo completedSizeInfo = new BackupSizeInfo { fileCount_All = 0, fileCount_Unique = 0, byteCount_All = 0, byteCount_Unique = 0 };
-
+			BackupSizeInfo thisTreeCompletedSizeInfo = new BackupSizeInfo() { fileCount_All = 0, fileCount_Unique = 0, byteCount_All = 0, byteCount_Unique = 0 };
+			int previousPercentComplete,
+				percentComplete = getCompletionPercentage(totalExpectedBackupSize.byteCount_All, previouslyCompleteSizeInfo.byteCount_All);
+			
 			// Back up the files in this directory.
 			userInterface.report($"Backing up directory {sourceDirectory.FullName}", ConsoleOutput.Verbosity.LowImportanceEvents);
 			foreach (FileInfo individualFile in sourceDirectory.EnumerateFiles())
@@ -137,8 +146,8 @@ namespace hlback.FileManagement
 				{
 					userInterface.report(1, $"Backing up file {individualFile.Name} to {destinationFilePath} [copying]", ConsoleOutput.Verbosity.LowImportanceEvents);
 					individualFile.CopyTo(destinationFilePath);
-					completedSizeInfo.fileCount_Unique++;
-					completedSizeInfo.byteCount_Unique += individualFile.Length;
+					thisTreeCompletedSizeInfo.fileCount_Unique++;
+					thisTreeCompletedSizeInfo.byteCount_Unique += individualFile.Length;
 				}
 				else
 				{
@@ -146,8 +155,12 @@ namespace hlback.FileManagement
 					userInterface.report(1, $"Backing up file {individualFile.Name} to {destinationFilePath} [identical existing file found; creating hardlink to {linkFilePath}]", ConsoleOutput.Verbosity.LowImportanceEvents);
 					hardLinker.createHardLink(destinationFilePath, linkFilePath);
 				}
-				completedSizeInfo.fileCount_All++;
-				completedSizeInfo.byteCount_All += individualFile.Length;
+				thisTreeCompletedSizeInfo.fileCount_All++;
+				thisTreeCompletedSizeInfo.byteCount_All += individualFile.Length;
+				
+				previousPercentComplete = percentComplete;
+				percentComplete = getCompletionPercentage(totalExpectedBackupSize.byteCount_All, previouslyCompleteSizeInfo.byteCount_All + thisTreeCompletedSizeInfo.byteCount_All);
+				userInterface.reportProgress(percentComplete, previousPercentComplete, ConsoleOutput.Verbosity.NormalEvents);
 
 				// Record in the backups database the new copy or link that was made.
 				database.addRecord(destinationFilePath, databaseInfoForFile);
@@ -157,16 +170,16 @@ namespace hlback.FileManagement
 			foreach (DirectoryInfo individualDirectory in sourceDirectory.EnumerateDirectories())
 			{
 				DirectoryInfo destinationSubDirectory = destinationCurrentDirectory.CreateSubdirectory(individualDirectory.Name);
+
+				BackupSizeInfo totalCompletedSizeInfo = previouslyCompleteSizeInfo + thisTreeCompletedSizeInfo;
+
 				BackupSizeInfo subDirectoryBackupSizeInfo =
-					makeFolderTreeBackup(individualDirectory, destinationSubDirectory, database, backupTimestampString, totalExpectedBackupSize);
+					makeFolderTreeBackup(individualDirectory, destinationSubDirectory, database, backupTimestampString, totalExpectedBackupSize, totalCompletedSizeInfo);
 				
-				completedSizeInfo.fileCount_All += subDirectoryBackupSizeInfo.fileCount_All;
-				completedSizeInfo.fileCount_Unique += subDirectoryBackupSizeInfo.fileCount_Unique;
-				completedSizeInfo.byteCount_All += subDirectoryBackupSizeInfo.byteCount_All;
-				completedSizeInfo.byteCount_Unique += subDirectoryBackupSizeInfo.byteCount_Unique;
+				thisTreeCompletedSizeInfo += subDirectoryBackupSizeInfo;
 			}
 
-			return completedSizeInfo;
+			return thisTreeCompletedSizeInfo;
 		} // end makeFolderTreeBackup()
 
 
