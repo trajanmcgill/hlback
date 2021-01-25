@@ -14,11 +14,11 @@ namespace hlback.FileManagement
 		private readonly ILinker hardLinker;
 		private readonly int? maxHardLinksPerFile;
 		private readonly int? maxDaysBeforeNewFullFileCopy;
-		private readonly string sourceRootPath, backupsRootPath;
+		private readonly string sourceRootPath, backupsDestinationRootPath;
 		private readonly ConsoleOutput userInterface;
 
 
-		public BackupProcessor(Configuration configuration, string sourcePath, string backupsRootPath, ConsoleOutput userInterface)
+		public BackupProcessor(Configuration configuration, ConsoleOutput userInterface)
 		{
 			systemType = configuration.systemType;
 			if (systemType == Configuration.SystemType.Windows)
@@ -27,8 +27,8 @@ namespace hlback.FileManagement
 				hardLinker = new LinuxLinker();
 			maxHardLinksPerFile = configuration.MaxHardLinksPerFile;
 			maxDaysBeforeNewFullFileCopy = configuration.MaxDaysBeforeNewFullFileCopy;
-			sourceRootPath = sourcePath;
-			this.backupsRootPath = backupsRootPath;
+			sourceRootPath = configuration.BackupSourcePath;
+			backupsDestinationRootPath = configuration.BackupDestinationPath;
 			this.userInterface = userInterface;
 		} // end BackupProcessor constructor
 
@@ -43,8 +43,8 @@ namespace hlback.FileManagement
 			userInterface.report(1, $"Total files found: {sourceTreeSizeInfo.fileCount_All}; Total Bytes: {sourceTreeSizeInfo.byteCount_All}", ConsoleOutput.Verbosity.NormalEvents);
 
 			// Get the backups root directory and get or create the backups database at that location.
-			DirectoryInfo backupsRootDirectory = new DirectoryInfo(backupsRootPath);
-			Database database = new Database(backupsRootPath, userInterface);
+			DirectoryInfo backupsRootDirectory = new DirectoryInfo(backupsDestinationRootPath);
+			Database database = new Database(backupsDestinationRootPath, userInterface);
 
 			// Create subdirectory for this new backup.
 			DirectoryInfo destinationBaseDirectory = createBackupTimeSubdirectory(backupsRootDirectory);

@@ -9,13 +9,18 @@ namespace hlback
 
 		public readonly int? MaxHardLinksPerFile;
 		public readonly int? MaxDaysBeforeNewFullFileCopy;
+		public readonly string BackupSourcePath;
+		public readonly string BackupDestinationPath;
 
 
-		public Configuration(int? maxHardLinksPerFile, int? maxDaysBeforeNewFullFileCopy)
+		public Configuration(int? maxHardLinksPerFile, int? maxDaysBeforeNewFullFileCopy, string backupSourcePath, string backupDestinationPath)
 		{
 			MaxHardLinksPerFile = maxHardLinksPerFile;
 			MaxDaysBeforeNewFullFileCopy = maxDaysBeforeNewFullFileCopy;
-		}
+			BackupSourcePath = backupSourcePath;
+			BackupDestinationPath = backupDestinationPath;
+		} // end Configuration constructor
+
 
 		public SystemType systemType
 		{
@@ -28,6 +33,7 @@ namespace hlback
 				else
 					throw new NotImplementedException("Unsupported operating system.");
 			}
-		}
-	}
+		} // end systemType property
+
+	} // end class Configuration
 }
