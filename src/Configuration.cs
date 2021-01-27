@@ -22,18 +22,15 @@ namespace hlback
 		} // end Configuration constructor
 
 
-		public SystemType systemType
+		public static SystemType getSystemType()
 		{
-			get
-			{
-				if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-					return SystemType.Windows;
-				else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-					return SystemType.Linux;
-				else
-					throw new NotImplementedException("Unsupported operating system.");
-			}
-		} // end systemType property
+			if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+				return SystemType.Windows;
+			else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+				return SystemType.Linux;
+			else
+				throw new NotImplementedException("Unsupported operating system.");
+		} // end getSystemType()
 
 	} // end class Configuration
 }

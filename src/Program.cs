@@ -8,8 +8,8 @@ namespace hlback
     {
         static void Main(string[] args)
         {
-			Configuration config = OptionsProcessor.getRuntimeConfiguration(args);
 			ConsoleOutput userInterface = new ConsoleOutput(ConsoleOutput.Verbosity.NormalEvents);
+			Configuration config = OptionsProcessor.getRuntimeConfiguration(args, userInterface);
 
 			BackupProcessor backupProcessor = new BackupProcessor(config, userInterface);
 			

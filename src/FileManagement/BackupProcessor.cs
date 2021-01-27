@@ -20,7 +20,7 @@ namespace hlback.FileManagement
 
 		public BackupProcessor(Configuration configuration, ConsoleOutput userInterface)
 		{
-			systemType = configuration.systemType;
+			systemType = Configuration.getSystemType();
 			if (systemType == Configuration.SystemType.Windows)
 				hardLinker = new WindowsLinker();
 			else
