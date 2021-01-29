@@ -28,15 +28,20 @@ namespace hlback
 
 			Configuration.SystemType systemType = Configuration.getSystemType();
 
+			// Go through each argument and find out what it is.
 			for (int i = 0; i < args.Length; i++)
 			{
+				// Get the current argument and identify whether it is a command line switch (e.g. "-MA") or a non-switch option
 				string currentArgument = args[i];
 				SwitchType argSwitchType = identifySwitch(currentArgument, systemType);
 
 				if (argSwitchType == SwitchType.UnrecognizedSwitch)
-					throw new OptionsException($"Unrecognized switch: {currentArgument}");
+					throw new OptionsException($"Unrecognized switch: {currentArgument}"); // Is a switch, but not a valid one.
 				else if (argSwitchType == SwitchType.NotASwitch)
 				{
+					// This argument is not a switch. The only non-switch options are the source and destination paths for the backup.
+					// The first path specified is treated as the source, and the second as the destination.
+					// Any additional non-switch options encountered are treated as an error.
 					if (backupSourcePath == null)
 						backupSourcePath = parsePathOption(currentArgument);
 					else if (backupDestinationRootPath == null)
@@ -46,6 +51,8 @@ namespace hlback
 				}
 				else
 				{
+					// Argument type is a recognized switch.
+					// Get the next argument, which provides the value for the option specified.
 					i++;
 					if (i >= args.Length || identifySwitch(args[i], systemType) != SwitchType.NotASwitch)
 						throw new OptionsException($"Missing option value for switch {currentArgument}");
@@ -65,14 +72,17 @@ namespace hlback
 						else
 							throw new OptionsException($"Switch -ML / --MaxHhardLinksPerFile specified more than once");
 					}
-				}
-			}
+				} // end if/else if/else block on argSwitchType
+			} // end for (int i = 0; i < args.Length; i++)
 
+			// If, when processing all the arguments, we never encountered a source path or destination path, it is an error.
 			if (backupSourcePath == null)
 				throw new OptionsException($"No backup source path specified");
 			if (backupDestinationRootPath == null)
 				throw new OptionsException($"No backup destination path specified");
 			
+			// Assemble a Configuration object based on the specified options.
+			// For optional arguments, if they are still null (and thus weren't specified), use the default values.
 			Configuration config =
 				new Configuration(
 					maxHardLinksPerFile ?? DefaultMaxHardLinksPerPhysicalFile,
