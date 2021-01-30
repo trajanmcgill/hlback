@@ -60,9 +60,9 @@ namespace hlback
 					// The first path specified is treated as the source, and the second as the destination.
 					// Any additional non-switch options encountered are treated as an error.
 					if (backupSourcePath == null)
-						backupSourcePath = parsePathOption(currentArgument);
+						backupSourcePath = Path.GetFullPath(currentArgument);
 					else if (backupDestinationRootPath == null)
-						backupDestinationRootPath = parsePathOption(currentArgument);
+						backupDestinationRootPath = Path.GetFullPath(currentArgument);
 					else
 						throw new OptionsException($"Source {backupSourcePath} and Destination {backupDestinationRootPath} already specified and additional, unexpected option specified: {currentArgument}");
 				}
@@ -112,16 +112,6 @@ namespace hlback
 
 			return config;
 		} // end getRuntimeConfiguration()
-
-
-		// parsePathOption():
-		/// <summary>Normalizes a path string (whether relative or full to begin with) as a full path.</summary>
-		/// <returns>A <c>string</c> containing a full path version of the specified path.</returns>
-		/// <param name="pathOption">A path <c>string</c> in relative or full form.</param>
-		private static string parsePathOption(string pathOption)
-		{
-			return Path.Combine(Directory.GetCurrentDirectory(), pathOption); // CHANGE CODE HERE
-		} // end parsePathOption()
 
 
 		// identifySwitch():

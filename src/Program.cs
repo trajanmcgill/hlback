@@ -18,7 +18,7 @@ namespace hlback
         {
 			Configuration config;
 			ConsoleOutput userInterface = new ConsoleOutput(ConsoleOutput.Verbosity.NormalEvents);
-			
+
 			try { config = OptionsProcessor.getRuntimeConfiguration(args); }
 			catch (ErrorManagement.OptionsException e)
 			{
