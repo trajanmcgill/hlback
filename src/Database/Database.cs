@@ -6,7 +6,7 @@ using System.Linq;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 
-namespace hlback.FileManagement
+namespace hlback.Database
 {
 	class Database
 	{

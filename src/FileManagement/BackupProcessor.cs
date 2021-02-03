@@ -77,7 +77,6 @@ namespace hlback.FileManagement
 		{
 			long fileCount = 0, byteCount = 0;
 
-
 			foreach (DirectoryInfo subDirectory in directory.EnumerateDirectories())
 			{
 				BackupSizeInfo subDirectorySizeInfo = scanDirectoryTree(subDirectory);
