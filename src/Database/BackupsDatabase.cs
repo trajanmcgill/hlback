@@ -16,6 +16,8 @@ namespace hlback.Database
 			ValidMatch
 		}
 
+		private const long TicksPerDay = 10000000L * 60 * 60 * 24;
+
 		private const string DatabaseFileName = ".hlbackdatabase";
 		private const string GroupCollectionName = "BackupFileGroups";
 
@@ -38,6 +40,10 @@ namespace hlback.Database
 			// Variable to contain return value, defaulting to null.
 			HardLinkMatch hardLinkMatch = null;
 			
+			// Translate the specified maximum age in days to a minimum date in ticks.
+			long? minimumFileGroupCreationDate =
+				(maxDataAgeForNewHardLink_Days == null) ? null : (DateTime.UtcNow.Ticks - maxDataAgeForNewHardLink_Days * TicksPerDay);
+
 			using(LiteDatabase database = new LiteDatabase(databasePath))
 			{
 				// Obtain the collection of hard link groups from the databse.
@@ -46,18 +52,14 @@ namespace hlback.Database
 				// Get all hard link groups that are new enough to be used.
 				// Order them based on most likelihood of being the best possible match:
 				// starting with the least-used ones and, within that, newest ones first.
-				List<GroupRecord> allGroups =
+				IOrderedEnumerable<GroupRecord> potentialFileGroups =
 					backupFileGroupCollection
 						.Query()
-						.ToList();
-				IEnumerable<GroupRecord> matchingHashGroups =
-					allGroups
-						.Where(fileGroup => (fileGroup.Hash == originFileHash));
-				IOrderedEnumerable<GroupRecord> potentialFileGroups =
-					matchingHashGroups
-						.Where(fileGroup => (maxDataAgeForNewHardLink_Days == null || fileGroup.Age < maxDataAgeForNewHardLink_Days))
+						.Where(fileGroup => (fileGroup.Hash == originFileHash))
+						.Where(fileGroup => (minimumFileGroupCreationDate == null || fileGroup.CreatedDate_UTC_Ticks >= minimumFileGroupCreationDate))
+						.ToList()
 						.OrderBy(fileGroup => fileGroup.Files.Count)
-						.ThenBy(fileGroup => fileGroup.Age);
+						.ThenByDescending(fileGroup => fileGroup.CreatedDate_UTC_Ticks);
 				
 				foreach(GroupRecord currentHardLinkGroupRecord in potentialFileGroups)
 				{
