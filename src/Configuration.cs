@@ -5,7 +5,7 @@ namespace hlback
 {
 	class Configuration
 	{
-		public enum SystemType { Linux, Windows };
+		public enum SystemType { Linux, Windows, Other };
 
 		public readonly int? MaxHardLinksPerFile;
 		public readonly int? MaxDaysBeforeNewFullFileCopy;
@@ -29,7 +29,7 @@ namespace hlback
 			else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
 				return SystemType.Linux;
 			else
-				throw new NotImplementedException("Unsupported operating system.");
+				return SystemType.Other;
 		} // end getSystemType()
 
 	} // end class Configuration

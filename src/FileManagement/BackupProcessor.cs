@@ -26,14 +26,20 @@ namespace hlback.FileManagement
 		public BackupProcessor(Configuration configuration, ConsoleOutput userInterface)
 		{
 			systemType = Configuration.getSystemType();
+			
 			if (systemType == Configuration.SystemType.Windows)
 				hardLinker = new WindowsLinker();
-			else
+			else if (systemType == Configuration.SystemType.Linux)
 				hardLinker = new LinuxLinker();
+			else
+				throw new NotImplementedException("Unsupported operating system.");
+			
 			maxHardLinksPerFile = configuration.MaxHardLinksPerFile;
 			maxDaysBeforeNewFullFileCopy = configuration.MaxDaysBeforeNewFullFileCopy;
+
 			sourceRootPath = configuration.BackupSourcePath;
 			backupsDestinationRootPath = configuration.BackupDestinationPath;
+			
 			this.userInterface = userInterface;
 		} // end BackupProcessor constructor
 
