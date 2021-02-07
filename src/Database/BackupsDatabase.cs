@@ -121,7 +121,13 @@ namespace hlback.Database
 				// Obtain the collection of hard link groups from the databse.
 				ILiteCollection<GroupRecord> backupFileGroupCollection = database.GetCollection<GroupRecord>(GroupCollectionName);
 
-				FileBackupRecord newFileBackupRecord = new FileBackupRecord() { Path = backedUpFileDestinationPath, LastModificationDate_UTC_Ticks = fileLastModificationDateUTC.Ticks };
+				FileBackupRecord newFileBackupRecord =
+					new FileBackupRecord()
+					{
+						Path = backedUpFileDestinationPath.Substring(backupsRootPath.Length), // Store only the portion of the path below the root backups directory.
+						LastModificationDate_UTC_Ticks = fileLastModificationDateUTC.Ticks
+					};
+
 				if (existingHardLinkGroupID == null)
 				{
 					List<FileBackupRecord> fileRecords = new List<FileBackupRecord>();
