@@ -4,10 +4,7 @@ namespace hlback.Database
 {
 	class FileBackupRecord
 	{
-		public string Hash { get; init; }
-		public long PhysicalCopyGroup { get; init; }
 		public string Path { get; init; }
-		public long Size { get; init; }
-		public DateTime LastModificationDate { get; init; }
+		public long LastModificationDate_UTC_Ticks { get; init; }
 	} // end class FileBackupRecord
 }

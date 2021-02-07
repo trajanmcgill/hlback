@@ -1,14 +1,19 @@
 using System;
 using System.IO;
+using System.Text;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
+using LiteDB;
+using hlback.Database;
 
 namespace hlback.FileManagement
 {
 	class BackupProcessor
 	{
 		private const string TimestampDirectoryCreationPattern = "yyyy-MM-dd.HH-mm-ss.fff";
+
+		private readonly Encoding HashEncoding = Encoding.UTF8;
 
 		private readonly Configuration.SystemType systemType;
 		private readonly ILinker hardLinker;
@@ -44,7 +49,7 @@ namespace hlback.FileManagement
 
 			// Get the backups root directory and get or create the backups database at that location.
 			DirectoryInfo backupsRootDirectory = new DirectoryInfo(backupsDestinationRootPath);
-			Database database = new Database(backupsDestinationRootPath, userInterface);
+			BackupsDatabase database = new BackupsDatabase(backupsDestinationRootPath, userInterface);
 
 			// Create subdirectory for this new backup.
 			DirectoryInfo destinationBaseDirectory = createBackupTimeSubdirectory(backupsRootDirectory);
@@ -123,7 +128,7 @@ namespace hlback.FileManagement
 
 		private BackupSizeInfo makeFolderTreeBackup(
 			DirectoryInfo sourceDirectory, DirectoryInfo destinationCurrentDirectory,
-			Database database, string backupTimestampString, BackupSizeInfo totalExpectedBackupSize, BackupSizeInfo previouslyCompleteSizeInfo)
+			BackupsDatabase database, string backupTimestampString, BackupSizeInfo totalExpectedBackupSize, BackupSizeInfo previouslyCompleteSizeInfo)
 		{
 			BackupSizeInfo thisTreeCompletedSizeInfo = new BackupSizeInfo() { fileCount_All = 0, fileCount_Unique = 0, byteCount_All = 0, byteCount_Unique = 0 };
 			int previousPercentComplete,
@@ -133,15 +138,17 @@ namespace hlback.FileManagement
 			userInterface.report($"Backing up directory {sourceDirectory.FullName}", ConsoleOutput.Verbosity.LowImportanceEvents);
 			foreach (FileInfo individualFile in sourceDirectory.EnumerateFiles())
 			{
-				// Figure out the backup destination for the current file.
+				// Figure out the source file hash and its backup destination.
+				string fileHash = getHash(individualFile);
 				string destinationFilePath = Path.Combine(destinationCurrentDirectory.FullName, individualFile.Name);
 
 				// Look in the database and find an existing, previously backed up file to create a hard link to,
 				// if any exists within the current run's rules for using links.
-				DatabaseQueryResults databaseInfoForFile = database.getDatabaseInfoForFile(individualFile, maxHardLinksPerFile, maxDaysBeforeNewFullFileCopy, backupTimestampString);
+				HardLinkMatch hardLinkMatch =
+					database.getAvailableHardLinkMatch(fileHash, individualFile.Length, individualFile.LastWriteTimeUtc, maxHardLinksPerFile, maxDaysBeforeNewFullFileCopy);
 
 				// Make a full copy of the file if needed, but otherwise create a hard link from a previous backup
-				if (databaseInfoForFile.bestHardLinkTarget == null)
+				if (hardLinkMatch == null)
 				{
 					userInterface.report(1, $"Backing up file {individualFile.Name} to {destinationFilePath} [copying]", ConsoleOutput.Verbosity.LowImportanceEvents);
 					individualFile.CopyTo(destinationFilePath);
@@ -150,7 +157,7 @@ namespace hlback.FileManagement
 				}
 				else
 				{
-					string linkFilePath = databaseInfoForFile.bestHardLinkTarget.FullName;
+					string linkFilePath = hardLinkMatch.MatchingFilePath;
 					userInterface.report(1, $"Backing up file {individualFile.Name} to {destinationFilePath} [identical existing file found; creating hardlink to {linkFilePath}]", ConsoleOutput.Verbosity.LowImportanceEvents);
 					hardLinker.createHardLink(destinationFilePath, linkFilePath);
 				}
@@ -162,7 +169,7 @@ namespace hlback.FileManagement
 				userInterface.reportProgress(percentComplete, previousPercentComplete, ConsoleOutput.Verbosity.NormalEvents);
 
 				// Record in the backups database the new copy or link that was made.
-				database.addRecord(destinationFilePath, databaseInfoForFile);
+				database.addFileBackupRecord(destinationFilePath, individualFile.Length, fileHash, individualFile.LastWriteTimeUtc, (hardLinkMatch == null ? null : hardLinkMatch.ID));
 			}
 
 			// Recurse through subdirectories, copying each one.
@@ -203,6 +210,32 @@ namespace hlback.FileManagement
 			else
 				File.Copy(sourceFileName, newFileName);
 		} // end copyFile()
+
+
+		private string normalizeHash(byte[] hashBytes)
+		{
+			return BitConverter.ToString(hashBytes).Replace("-", "").ToLower();
+		} // end normalizeHash()
+
+
+		private HashAlgorithm getHasher()
+		{
+			return SHA1.Create();
+		} // end getHasher()
+
+
+		private string getHash(string stringToHash)
+		{
+			using(HashAlgorithm hasher = getHasher())
+			{	return normalizeHash(hasher.ComputeHash(HashEncoding.GetBytes(stringToHash)));	}
+		} // end getHash(string)
+
+		private string getHash(FileInfo file)
+		{
+			using(HashAlgorithm hasher = getHasher())
+			using(FileStream stream = file.Open(FileMode.Open, FileAccess.Read))
+			{	return normalizeHash(hasher.ComputeHash(stream));	}
+		} // end getHash(FileInfo)
 
 	} // end class BackupProcessor
 }
