@@ -2,9 +2,7 @@ using System;
 using System.IO;
 using System.Text;
 using System.Collections.Generic;
-using System.Linq;
 using System.Security.Cryptography;
-using LiteDB;
 using hlback.Database;
 
 namespace hlback.FileManagement
@@ -19,7 +17,8 @@ namespace hlback.FileManagement
 		private readonly ILinker hardLinker;
 		private readonly int? maxHardLinksPerFile;
 		private readonly int? maxDaysBeforeNewFullFileCopy;
-		private readonly string sourceRootPath, backupsDestinationRootPath;
+		private readonly List<string> sourcePaths;
+		private readonly string backupsDestinationRootPath;
 		private readonly ConsoleOutput userInterface;
 
 
@@ -37,7 +36,7 @@ namespace hlback.FileManagement
 			maxHardLinksPerFile = configuration.MaxHardLinksPerFile;
 			maxDaysBeforeNewFullFileCopy = configuration.MaxDaysBeforeNewFullFileCopy;
 
-			sourceRootPath = configuration.BackupSourcePath;
+			sourcePaths = configuration.BackupSourcePaths;
 			backupsDestinationRootPath = configuration.BackupDestinationPath;
 			
 			this.userInterface = userInterface;
@@ -46,12 +45,19 @@ namespace hlback.FileManagement
 
 		public void doBackup()
 		{
-			DirectoryInfo sourceDirectory = new DirectoryInfo(sourceRootPath);
+			BackupSizeInfo totalExpectedSizeInfo = new BackupSizeInfo() { fileCount_All = 0, fileCount_Unique = 0, byteCount_All = 0, byteCount_Unique = 0 };
 
-			userInterface.report($"Backing up {sourceRootPath}. Scanning directory tree...", ConsoleOutput.Verbosity.NormalEvents);
+			userInterface.report("Scanning source directory trees:", ConsoleOutput.Verbosity.NormalEvents);
+			foreach (string sourcePath in sourcePaths)
+			{
+				userInterface.report(1, $"Scanning {sourcePath}...", ConsoleOutput.Verbosity.NormalEvents);
+				BackupSizeInfo currentTreeSizeInfo = scanDirectoryTree(new DirectoryInfo(sourcePath));
 
-			BackupSizeInfo sourceTreeSizeInfo = scanDirectoryTree(sourceDirectory);
-			userInterface.report(1, $"Total files found: {sourceTreeSizeInfo.fileCount_All}; Total Bytes: {sourceTreeSizeInfo.byteCount_All}", ConsoleOutput.Verbosity.NormalEvents);
+				userInterface.report(2, $"Files found: {currentTreeSizeInfo.fileCount_All}; Bytes: {currentTreeSizeInfo.byteCount_All}", ConsoleOutput.Verbosity.NormalEvents);
+				totalExpectedSizeInfo += currentTreeSizeInfo;
+			}
+
+			userInterface.report(1, $"Total files found: {totalExpectedSizeInfo.fileCount_All}; Total Bytes: {totalExpectedSizeInfo.byteCount_All}", ConsoleOutput.Verbosity.NormalEvents);
 
 			// Get the backups root directory and get or create the backups database at that location.
 			DirectoryInfo backupsRootDirectory = new DirectoryInfo(backupsDestinationRootPath);
@@ -64,11 +70,15 @@ namespace hlback.FileManagement
 
 			// Copy all the files.
 			DateTime copyStartTime = DateTime.Now;
-			BackupSizeInfo emptyBackupSizeInfo = new BackupSizeInfo { fileCount_All = 0, fileCount_Unique = 0, byteCount_All = 0, byteCount_Unique = 0 };
-			BackupSizeInfo completedBackupSizeInfo = makeFolderTreeBackup(new DirectoryInfo(sourceRootPath), destinationBaseDirectory, database, backupTimeString, sourceTreeSizeInfo, emptyBackupSizeInfo);
+			BackupSizeInfo completedBackupSizeInfo = new BackupSizeInfo { fileCount_All = 0, fileCount_Unique = 0, byteCount_All = 0, byteCount_Unique = 0 };
+			foreach (string currentSourcePath in sourcePaths)
+			{
+				BackupSizeInfo currentSourceBackupSizeInfo =
+					makeFolderTreeBackup(new DirectoryInfo(currentSourcePath), destinationBaseDirectory, database, backupTimeString, totalExpectedSizeInfo, completedBackupSizeInfo);
+				completedBackupSizeInfo += currentSourceBackupSizeInfo;
+			}
 			DateTime copyEndTime = DateTime.Now;
 
-			
 			int totalTime = (int)Math.Round(copyEndTime.Subtract(copyStartTime).TotalSeconds);
 			long totalFiles = completedBackupSizeInfo.fileCount_All,
 				copiedFiles = completedBackupSizeInfo.fileCount_Unique,
@@ -81,7 +91,7 @@ namespace hlback.FileManagement
 			userInterface.report(1, $"Copy process duration: {totalTime} seconds.", ConsoleOutput.Verbosity.NormalEvents);
 			userInterface.report(1, $"Total files: {totalFiles} ({copiedFiles} new physical copies needed, {linkedFiles} hardlinks utilized)", ConsoleOutput.Verbosity.NormalEvents);
 			userInterface.report(1, $"Total bytes: {totalBytes} ({copiedBytes} physically copied, {linkedBytes} hardlinked)", ConsoleOutput.Verbosity.NormalEvents);
-		} // end makeEntireBackup()
+		} // end doBackup()
 
 
 		private BackupSizeInfo scanDirectoryTree(DirectoryInfo directory)

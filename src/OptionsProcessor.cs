@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Collections.Generic;
 using hlback.ErrorManagement;
 
 namespace hlback
@@ -34,7 +35,7 @@ namespace hlback
 			// Variables for holding configuration setting values to be returned.
 			int? maxDaysBeforeNewFullFileCopy = null;
 			int? maxHardLinksPerFile = null;
-			string backupSourcePath = null;
+			List<string> backupSourcePaths = new List<string>();
 			string backupDestinationRootPath = null;
 
 			// Find out what platform we are running on. This is so we can allow switches to be defined on the command line
@@ -57,14 +58,12 @@ namespace hlback
 				else if (argSwitchType == SwitchType.NotASwitch)
 				{
 					// This argument is not a switch. The only non-switch options are the source and destination paths for the backup.
-					// The first path specified is treated as the source, and the second as the destination.
-					// Any additional non-switch options encountered are treated as an error.
-					if (backupSourcePath == null)
-						backupSourcePath = Path.GetFullPath(currentArgument);
-					else if (backupDestinationRootPath == null)
-						backupDestinationRootPath = Path.GetFullPath(currentArgument);
-					else
-						throw new OptionsException($"Source {backupSourcePath} and Destination {backupDestinationRootPath} already specified and additional, unexpected option specified: {currentArgument}");
+					// The last path specified is treated as the destination, and all others as sources.
+					// Load the current argument in as the destination path, and if there already was a previous path argument,
+					// then now treat the previous one as one of the source paths.
+					if (backupDestinationRootPath != null)
+						backupSourcePaths.Add(backupDestinationRootPath);
+					backupDestinationRootPath = Path.GetFullPath(currentArgument);
 				}
 				else
 				{
@@ -96,7 +95,7 @@ namespace hlback
 			} // end for (int i = 0; i < args.Length; i++)
 
 			// If, when processing all the arguments, we never encountered a source path or destination path, it is an error.
-			if (backupSourcePath == null)
+			if (backupSourcePaths.Count < 1)
 				throw new OptionsException($"No backup source path specified");
 			if (backupDestinationRootPath == null)
 				throw new OptionsException($"No backup destination path specified");
@@ -107,7 +106,7 @@ namespace hlback
 				new Configuration(
 					maxHardLinksPerFile ?? DefaultMaxHardLinksPerPhysicalFile,
 					maxDaysBeforeNewFullFileCopy ?? DefaultMaxDaysBeforeNewFullFileCopy,
-					backupSourcePath,
+					backupSourcePaths,
 					backupDestinationRootPath);
 
 			return config;
