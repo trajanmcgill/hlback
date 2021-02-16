@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Collections.Generic;
 using hlback.ErrorManagement;
+using hlback.FileManagement;
 
 namespace hlback
 {
@@ -14,6 +15,7 @@ namespace hlback
 		private enum SwitchType
 		{
 			NotASwitch,
+			SourcesFile,
 			MaxDaysBeforeNewFullFileCopy,
 			MaxHardLinksPerPhysicalFile,
 			UnrecognizedSwitch
@@ -35,7 +37,9 @@ namespace hlback
 			// Variables for holding configuration setting values to be returned.
 			int? maxDaysBeforeNewFullFileCopy = null;
 			int? maxHardLinksPerFile = null;
-			List<string> backupSourcePaths = new List<string>();
+			List<string> commandLineSourcePaths = new List<string>();
+			List<SourcePathInfo> sourcePaths = new List<SourcePathInfo>();
+			string sourcesFilePath = null;
 			string backupDestinationRootPath = null;
 
 			// Find out what platform we are running on. This is so we can allow switches to be defined on the command line
@@ -59,10 +63,11 @@ namespace hlback
 				{
 					// This argument is not a switch. The only non-switch options are the source and destination paths for the backup.
 					// The last path specified is treated as the destination, and all others as sources.
-					// Load the current argument in as the destination path, and if there already was a previous path argument,
-					// then now treat the previous one as one of the source paths.
+
+					// If there already was a path argument specified, the previous one was apparently a source, not the destination,
+					// and the destination should now be set to the newest path argument.
 					if (backupDestinationRootPath != null)
-						backupSourcePaths.Add(backupDestinationRootPath);
+						commandLineSourcePaths.Add(backupDestinationRootPath); // CHANGE CODE HERE: need to 1) use the parent of the source path as the base, so the source path object itself gets copied; 2) handle that somehow even if that's a root directory; 3) allow the option of specifying a file source rather than a directory source.
 					backupDestinationRootPath = Path.GetFullPath(currentArgument);
 				}
 				else
@@ -77,7 +82,14 @@ namespace hlback
 					}
 					string optionValue = args[i];
 
-					if (argSwitchType == SwitchType.MaxDaysBeforeNewFullFileCopy)
+					if (argSwitchType == SwitchType.SourcesFile)
+					{
+						if (sourcesFilePath == null)
+							sourcesFilePath = optionValue;
+						else
+							throw new OptionsException($"Switch -SF / --SourcesFile specified more than once"); // Same switch appeared more than once on the command line.
+					}
+					else if (argSwitchType == SwitchType.MaxDaysBeforeNewFullFileCopy)
 					{
 						if (maxDaysBeforeNewFullFileCopy == null)
 							maxDaysBeforeNewFullFileCopy = int.Parse(optionValue);
@@ -94,8 +106,14 @@ namespace hlback
 				} // end if/else if/else block on argSwitchType
 			} // end for (int i = 0; i < args.Length; i++)
 
+			// Build the list of source paths and associated rules.
+			foreach (string sourcePathString in commandLineSourcePaths)
+				sourcePaths.Add(new SourcePathInfo(sourcePathString, null));
+			
+			// ADD CODE HERE: read source paths file if one was specified
+
 			// If, when processing all the arguments, we never encountered a source path or destination path, it is an error.
-			if (backupSourcePaths.Count < 1)
+			if (commandLineSourcePaths.Count < 1)
 				throw new OptionsException($"No backup source path specified");
 			if (backupDestinationRootPath == null)
 				throw new OptionsException($"No backup destination path specified");
@@ -106,7 +124,7 @@ namespace hlback
 				new Configuration(
 					maxHardLinksPerFile ?? DefaultMaxHardLinksPerPhysicalFile,
 					maxDaysBeforeNewFullFileCopy ?? DefaultMaxDaysBeforeNewFullFileCopy,
-					backupSourcePaths,
+					sourcePaths,
 					backupDestinationRootPath);
 
 			return config;
@@ -176,7 +194,9 @@ namespace hlback
 		private static SwitchType parseSwitchText_short(string switchName)
 		{
 			switchName = switchName.ToUpper();
-			if (switchName == "MA")
+			if (switchName == "SF")
+				return SwitchType.SourcesFile;
+			else if (switchName == "MA")
 				return SwitchType.MaxDaysBeforeNewFullFileCopy;
 			else if (switchName == "ML")
 				return SwitchType.MaxHardLinksPerPhysicalFile;
@@ -195,7 +215,9 @@ namespace hlback
 		private static SwitchType parseSwitchText_long(string switchName)
 		{
 			switchName = switchName.ToUpper();
-			if (switchName == "MAXHARDLINKAGE")
+			if (switchName == "SOURCESFILE")
+				return SwitchType.SourcesFile;
+			else if (switchName == "MAXHARDLINKAGE")
 				return SwitchType.MaxDaysBeforeNewFullFileCopy;
 			else if (switchName == "MAXHARDLINKSPERFILE")
 				return SwitchType.MaxHardLinksPerPhysicalFile;

@@ -1,7 +1,7 @@
 using System;
 using System.IO;
 using System.Text;
-using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Security.Cryptography;
 using hlback.Database;
 
@@ -17,7 +17,7 @@ namespace hlback.FileManagement
 		private readonly ILinker hardLinker;
 		private readonly int? maxHardLinksPerFile;
 		private readonly int? maxDaysBeforeNewFullFileCopy;
-		private readonly List<string> sourcePaths;
+		private readonly ReadOnlyCollection<SourcePathInfo> sourcePaths;
 		private readonly string backupsDestinationRootPath;
 		private readonly ConsoleOutput userInterface;
 
@@ -48,10 +48,10 @@ namespace hlback.FileManagement
 			BackupSizeInfo totalExpectedSizeInfo = new BackupSizeInfo() { fileCount_All = 0, fileCount_Unique = 0, byteCount_All = 0, byteCount_Unique = 0 };
 
 			userInterface.report("Scanning source directory trees:", ConsoleOutput.Verbosity.NormalEvents);
-			foreach (string sourcePath in sourcePaths)
+			foreach (SourcePathInfo sourcePath in sourcePaths)
 			{
 				userInterface.report(1, $"Scanning {sourcePath}...", ConsoleOutput.Verbosity.NormalEvents);
-				BackupSizeInfo currentTreeSizeInfo = scanDirectoryTree(new DirectoryInfo(sourcePath));
+				BackupSizeInfo currentTreeSizeInfo = sourcePath.Size;
 
 				userInterface.report(2, $"Files found: {currentTreeSizeInfo.fileCount_All}; Bytes: {currentTreeSizeInfo.byteCount_All}", ConsoleOutput.Verbosity.NormalEvents);
 				totalExpectedSizeInfo += currentTreeSizeInfo;
@@ -65,16 +65,16 @@ namespace hlback.FileManagement
 
 			// Create subdirectory for this new backup.
 			DirectoryInfo destinationBaseDirectory = createBackupTimeSubdirectory(backupsRootDirectory);
-			string backupTimeString = destinationBaseDirectory.Name;
 			userInterface.report($"Backing up to {destinationBaseDirectory.FullName}", ConsoleOutput.Verbosity.NormalEvents);
 
 			// Copy all the files.
 			DateTime copyStartTime = DateTime.Now;
 			BackupSizeInfo completedBackupSizeInfo = new BackupSizeInfo { fileCount_All = 0, fileCount_Unique = 0, byteCount_All = 0, byteCount_Unique = 0 };
-			foreach (string currentSourcePath in sourcePaths)
+			foreach (SourcePathInfo currentSourcePath in sourcePaths)
 			{
 				BackupSizeInfo currentSourceBackupSizeInfo =
-					makeFolderTreeBackup(new DirectoryInfo(currentSourcePath), destinationBaseDirectory, database, backupTimeString, totalExpectedSizeInfo, completedBackupSizeInfo);
+					makeFolderTreeBackup(currentSourcePath, destinationBaseDirectory,
+					                     database, totalExpectedSizeInfo, completedBackupSizeInfo);
 				completedBackupSizeInfo += currentSourceBackupSizeInfo;
 			}
 			DateTime copyEndTime = DateTime.Now;
@@ -92,30 +92,6 @@ namespace hlback.FileManagement
 			userInterface.report(1, $"Total files: {totalFiles} ({copiedFiles} new physical copies needed, {linkedFiles} hardlinks utilized)", ConsoleOutput.Verbosity.NormalEvents);
 			userInterface.report(1, $"Total bytes: {totalBytes} ({copiedBytes} physically copied, {linkedBytes} hardlinked)", ConsoleOutput.Verbosity.NormalEvents);
 		} // end doBackup()
-
-
-		private BackupSizeInfo scanDirectoryTree(DirectoryInfo directory)
-		{
-			long fileCount = 0, byteCount = 0;
-
-			foreach (DirectoryInfo subDirectory in directory.EnumerateDirectories())
-			{
-				BackupSizeInfo subDirectorySizeInfo = scanDirectoryTree(subDirectory);
-				fileCount += subDirectorySizeInfo.fileCount_All;
-				byteCount += subDirectorySizeInfo.byteCount_All;
-			}
-
-			foreach (FileInfo file in directory.EnumerateFiles())
-			{
-				fileCount++;
-				byteCount += file.Length;
-			}
-
-			BackupSizeInfo treeSizeInfo =
-				new BackupSizeInfo { fileCount_All = fileCount, fileCount_Unique = fileCount, byteCount_All = byteCount, byteCount_Unique = byteCount };
-
-			return treeSizeInfo;
-		} // end scanDirectoryTree()
 
 
 		private DirectoryInfo createBackupTimeSubdirectory(DirectoryInfo baseDirectory)
@@ -143,63 +119,56 @@ namespace hlback.FileManagement
 
 
 		private BackupSizeInfo makeFolderTreeBackup(
-			DirectoryInfo sourceDirectory, DirectoryInfo destinationCurrentDirectory,
-			BackupsDatabase database, string backupTimestampString, BackupSizeInfo totalExpectedBackupSize, BackupSizeInfo previouslyCompleteSizeInfo)
+			SourcePathInfo sourcePath, DirectoryInfo destinationBaseDirectory,
+			BackupsDatabase database, BackupSizeInfo totalExpectedBackupSize, BackupSizeInfo previouslyCompleteSizeInfo)
 		{
 			BackupSizeInfo thisTreeCompletedSizeInfo = new BackupSizeInfo() { fileCount_All = 0, fileCount_Unique = 0, byteCount_All = 0, byteCount_Unique = 0 };
 			int previousPercentComplete,
 				percentComplete = getCompletionPercentage(totalExpectedBackupSize.byteCount_All, previouslyCompleteSizeInfo.byteCount_All);
 			
-			// Back up the files in this directory.
-			userInterface.report($"Backing up directory {sourceDirectory.FullName}", ConsoleOutput.Verbosity.LowImportanceEvents);
-			foreach (FileInfo individualFile in sourceDirectory.EnumerateFiles())
+			foreach (BackupItemInfo item in sourcePath.Items)
 			{
-				// Figure out the source file hash and its backup destination.
-				string fileHash = getHash(individualFile);
-				string destinationFilePath = Path.Combine(destinationCurrentDirectory.FullName, individualFile.Name);
-
-				// Look in the database and find an existing, previously backed up file to create a hard link to,
-				// if any exists within the current run's rules for using links.
-				HardLinkMatch hardLinkMatch =
-					database.getAvailableHardLinkMatch(fileHash, individualFile.Length, individualFile.LastWriteTimeUtc, maxHardLinksPerFile, maxDaysBeforeNewFullFileCopy);
-
-				// Make a full copy of the file if needed, but otherwise create a hard link from a previous backup
-				if (hardLinkMatch == null)
+				string fullItemDestinationPath = Path.Combine(destinationBaseDirectory.FullName, item.PathFromBase);
+				if (item.Type == BackupItemInfo.ItemType.Directory)
+					(new DirectoryInfo(fullItemDestinationPath)).Create();
+				else // Item is a file.
 				{
-					userInterface.report(1, $"Backing up file {individualFile.Name} to {destinationFilePath} [copying]", ConsoleOutput.Verbosity.LowImportanceEvents);
-					individualFile.CopyTo(destinationFilePath);
-					thisTreeCompletedSizeInfo.fileCount_Unique++;
-					thisTreeCompletedSizeInfo.byteCount_Unique += individualFile.Length;
-				}
-				else
-				{
-					string linkFilePath = hardLinkMatch.MatchingFilePath;
-					userInterface.report(1, $"Backing up file {individualFile.Name} to {destinationFilePath} [identical existing file found; creating hardlink to {linkFilePath}]", ConsoleOutput.Verbosity.LowImportanceEvents);
-					hardLinker.createHardLink(destinationFilePath, linkFilePath);
-				}
-				thisTreeCompletedSizeInfo.fileCount_All++;
-				thisTreeCompletedSizeInfo.byteCount_All += individualFile.Length;
-				
+					// Figure out the source file hash.
+					FileInfo currentSourceFile = new FileInfo(Path.Combine(sourcePath.BaseDirectoryPath, item.PathFromBase));
+					string fileHash = getHash(currentSourceFile);
+
+					// Look in the database and find an existing, previously backed up file to create a hard link to,
+					// if any exists within the current run's rules for using links.
+					HardLinkMatch hardLinkMatch =
+						database.getAvailableHardLinkMatch(
+							fileHash, currentSourceFile.Length,
+							currentSourceFile.LastWriteTimeUtc, maxHardLinksPerFile, maxDaysBeforeNewFullFileCopy);
+
+					// Make a full copy of the file if needed, but otherwise create a hard link from a previous backup
+					if (hardLinkMatch == null)
+					{
+						userInterface.report(1, $"Backing up file {currentSourceFile.Name} to {fullItemDestinationPath} [copying]", ConsoleOutput.Verbosity.LowImportanceEvents);
+						currentSourceFile.CopyTo(fullItemDestinationPath);
+						thisTreeCompletedSizeInfo.fileCount_Unique++;
+						thisTreeCompletedSizeInfo.byteCount_Unique += currentSourceFile.Length;
+					}
+					else
+					{
+						string linkFilePath = hardLinkMatch.MatchingFilePath;
+						userInterface.report(1, $"Backing up file {currentSourceFile.Name} to {fullItemDestinationPath} [identical existing file found; creating hardlink to {linkFilePath}]", ConsoleOutput.Verbosity.LowImportanceEvents);
+						hardLinker.createHardLink(fullItemDestinationPath, linkFilePath);
+					}
+					thisTreeCompletedSizeInfo.fileCount_All++;
+					thisTreeCompletedSizeInfo.byteCount_All += currentSourceFile.Length;
+
+					// Record in the backups database the new copy or link that was made.
+					database.addFileBackupRecord(fullItemDestinationPath, currentSourceFile.Length, fileHash, currentSourceFile.LastWriteTimeUtc, (hardLinkMatch == null ? null : hardLinkMatch.ID));
+				} // end if/else on (item.Type == BackupItemInfo.ItemType.Directory)
+
 				previousPercentComplete = percentComplete;
 				percentComplete = getCompletionPercentage(totalExpectedBackupSize.byteCount_All, previouslyCompleteSizeInfo.byteCount_All + thisTreeCompletedSizeInfo.byteCount_All);
 				userInterface.reportProgress(percentComplete, previousPercentComplete, ConsoleOutput.Verbosity.NormalEvents);
-
-				// Record in the backups database the new copy or link that was made.
-				database.addFileBackupRecord(destinationFilePath, individualFile.Length, fileHash, individualFile.LastWriteTimeUtc, (hardLinkMatch == null ? null : hardLinkMatch.ID));
-			}
-
-			// Recurse through subdirectories, copying each one.
-			foreach (DirectoryInfo individualDirectory in sourceDirectory.EnumerateDirectories())
-			{
-				DirectoryInfo destinationSubDirectory = destinationCurrentDirectory.CreateSubdirectory(individualDirectory.Name);
-
-				BackupSizeInfo totalCompletedSizeInfo = previouslyCompleteSizeInfo + thisTreeCompletedSizeInfo;
-
-				BackupSizeInfo subDirectoryBackupSizeInfo =
-					makeFolderTreeBackup(individualDirectory, destinationSubDirectory, database, backupTimestampString, totalExpectedBackupSize, totalCompletedSizeInfo);
-				
-				thisTreeCompletedSizeInfo += subDirectoryBackupSizeInfo;
-			}
+			} // end foreach (BackupItemInfo item in sourcePath.Items)
 
 			return thisTreeCompletedSizeInfo;
 		} // end makeFolderTreeBackup()

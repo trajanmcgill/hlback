@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Runtime.InteropServices;
+using hlback.FileManagement;
 
 namespace hlback
 {
@@ -10,15 +12,15 @@ namespace hlback
 
 		public readonly int? MaxHardLinksPerFile;
 		public readonly int? MaxDaysBeforeNewFullFileCopy;
-		public readonly List<string> BackupSourcePaths;
+		public readonly ReadOnlyCollection<SourcePathInfo> BackupSourcePaths;
 		public readonly string BackupDestinationPath;
 
 
-		public Configuration(int? maxHardLinksPerFile, int? maxDaysBeforeNewFullFileCopy, List<string> backupSourcePaths, string backupDestinationPath)
+		public Configuration(int? maxHardLinksPerFile, int? maxDaysBeforeNewFullFileCopy, List<SourcePathInfo> backupSourcePaths, string backupDestinationPath)
 		{
 			MaxHardLinksPerFile = maxHardLinksPerFile;
 			MaxDaysBeforeNewFullFileCopy = maxDaysBeforeNewFullFileCopy;
-			BackupSourcePaths = backupSourcePaths;
+			BackupSourcePaths = new ReadOnlyCollection<SourcePathInfo>(backupSourcePaths);
 			BackupDestinationPath = backupDestinationPath;
 		} // end Configuration constructor
 
