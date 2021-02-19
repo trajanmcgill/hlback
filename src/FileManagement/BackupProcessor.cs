@@ -50,7 +50,7 @@ namespace hlback.FileManagement
 			userInterface.report("Scanning source directory trees:", ConsoleOutput.Verbosity.NormalEvents);
 			foreach (SourcePathInfo sourcePath in sourcePaths)
 			{
-				userInterface.report(1, $"Scanning {sourcePath}...", ConsoleOutput.Verbosity.NormalEvents);
+				userInterface.report(1, $"Scanning {sourcePath.BaseItemFullPath}...", ConsoleOutput.Verbosity.NormalEvents);
 				BackupSizeInfo currentTreeSizeInfo = sourcePath.Size;
 
 				userInterface.report(2, $"Files found: {currentTreeSizeInfo.fileCount_All}; Bytes: {currentTreeSizeInfo.byteCount_All}", ConsoleOutput.Verbosity.NormalEvents);

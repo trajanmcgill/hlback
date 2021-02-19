@@ -39,8 +39,7 @@ namespace hlback
 			int? maxHardLinksPerFile = null;
 			List<string> commandLineSourcePaths = new List<string>();
 			List<SourcePathInfo> sourcePaths = new List<SourcePathInfo>();
-			string sourcesFilePath = null;
-			string backupDestinationRootPath = null;
+			string sourcesFilePath = null, lastReadCommandLinePath = null, backupDestinationRootPath = null;
 
 			// Find out what platform we are running on. This is so we can allow switches to be defined on the command line
 			// with a forward slash ("/") on Windows. On Linux we'll require "-" or "--" versions of the switch, because
@@ -66,9 +65,9 @@ namespace hlback
 
 					// If there already was a path argument specified, the previous one was apparently a source, not the destination,
 					// and the destination should now be set to the newest path argument.
-					if (backupDestinationRootPath != null)
-						commandLineSourcePaths.Add(backupDestinationRootPath); // CHANGE CODE HERE: need to 1) use the parent of the source path as the base, so the source path object itself gets copied; 2) handle that somehow even if that's a root directory; 3) allow the option of specifying a file source rather than a directory source.
-					backupDestinationRootPath = Path.GetFullPath(currentArgument + (Path.EndsInDirectorySeparator(currentArgument) ? "" : Path.DirectorySeparatorChar.ToString()));
+					if (lastReadCommandLinePath != null)
+						commandLineSourcePaths.Add(lastReadCommandLinePath);
+					lastReadCommandLinePath = Path.GetFullPath(currentArgument);
 				}
 				else
 				{
@@ -115,8 +114,10 @@ namespace hlback
 			// If, when processing all the arguments, we never encountered a source path or destination path, it is an error.
 			if (commandLineSourcePaths.Count < 1)
 				throw new OptionsException($"No backup source path specified");
-			if (backupDestinationRootPath == null)
+			if (lastReadCommandLinePath == null)
 				throw new OptionsException($"No backup destination path specified");
+			else
+				backupDestinationRootPath = lastReadCommandLinePath + (Path.EndsInDirectorySeparator(lastReadCommandLinePath) ? "" : Path.DirectorySeparatorChar.ToString());
 			
 			// Assemble a Configuration object based on the specified options.
 			// For optional arguments, if they are still null (and thus weren't specified), use the default values.
