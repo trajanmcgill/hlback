@@ -1,6 +1,5 @@
 using System;
 using System.IO;
-using System.Security.Cryptography;
 using System.Linq;
 using System.Collections.Generic;
 using LiteDB;
@@ -39,7 +38,7 @@ namespace hlback.Database
 		{
 			// Variable to contain return value, defaulting to null.
 			HardLinkMatch hardLinkMatch = null;
-			
+
 			// Translate the specified maximum age in days to a minimum date in ticks.
 			long? minimumFileGroupCreationDate =
 				(maxDataAgeForNewHardLink_Days == null) ? null : (DateTime.UtcNow.Ticks - maxDataAgeForNewHardLink_Days * TicksPerDay);
@@ -60,28 +59,31 @@ namespace hlback.Database
 						.ToList()
 						.OrderBy(fileGroup => fileGroup.Files.Count)
 						.ThenByDescending(fileGroup => fileGroup.CreatedDate_UTC_Ticks);
-				
+
 				foreach(GroupRecord currentHardLinkGroupRecord in potentialFileGroups)
 				{
+
 					for (int i = currentHardLinkGroupRecord.Files.Count - 1; i >= 0; i--)
 					{
-						FileBackupRecord currentFileBackupRecord = currentHardLinkGroupRecord.Files[i];
+						FileBackupRecord fileBackupRecordToCheck = currentHardLinkGroupRecord.Files[i];
 						string lastValidPotentialMatch = null;
-						string currentFileFullPath = Path.Combine(backupsRootPath, currentFileBackupRecord.Path);
+						string backupRecordFileFullPath = Path.Combine(backupsRootPath, fileBackupRecordToCheck.Path);
 
 						DatabaseRecordFileValidity oldBackupFileMatchValidity =
-							checkFileBackupRecord(currentHardLinkGroupRecord, currentFileBackupRecord, currentFileFullPath, originFileSize, originFileLastWriteTimeUTC);
+							checkFileBackupRecord(currentHardLinkGroupRecord, fileBackupRecordToCheck, backupRecordFileFullPath, originFileSize, originFileLastWriteTimeUTC);
+
 						if (oldBackupFileMatchValidity == DatabaseRecordFileValidity.ValidMatch)
 						{
 							// Database record points to a valid, matching previous backup file.
 							// Remember this one as a possibly usable file to use as a hard link target.
-							lastValidPotentialMatch = currentFileFullPath;
+							lastValidPotentialMatch = backupRecordFileFullPath;
 						}
 						else if (oldBackupFileMatchValidity == DatabaseRecordFileValidity.Invalid)
 						{
 							// The file referred to by this database record no longer exists or has been modified.
 							// This database record is no longer valid, so delete the record.
 							currentHardLinkGroupRecord.Files.RemoveAt(i);
+							backupFileGroupCollection.Update(currentHardLinkGroupRecord);
 						}
 						else // Nonmatch
 						{

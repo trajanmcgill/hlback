@@ -128,13 +128,13 @@ namespace hlback.FileManagement
 			
 			foreach (BackupItemInfo item in sourcePath.Items)
 			{
-				string fullItemDestinationPath = Path.Combine(destinationBaseDirectory.FullName, item.PathFromBase);
+				string fullItemDestinationPath = Path.Combine(destinationBaseDirectory.FullName, item.RelativePath);
 				if (item.Type == BackupItemInfo.ItemType.Directory)
 					(new DirectoryInfo(fullItemDestinationPath)).Create();
 				else // Item is a file.
 				{
 					// Figure out the source file hash.
-					FileInfo currentSourceFile = new FileInfo(Path.Combine(sourcePath.BaseDirectoryPath, item.PathFromBase));
+					FileInfo currentSourceFile = new FileInfo(item.FullPath);
 					string fileHash = getHash(currentSourceFile);
 
 					// Look in the database and find an existing, previously backed up file to create a hard link to,
@@ -147,7 +147,7 @@ namespace hlback.FileManagement
 					// Make a full copy of the file if needed, but otherwise create a hard link from a previous backup
 					if (hardLinkMatch == null)
 					{
-						userInterface.report(1, $"Backing up file {currentSourceFile.Name} to {fullItemDestinationPath} [copying]", ConsoleOutput.Verbosity.LowImportanceEvents);
+						userInterface.report(1, $"Backing up file {item.FullPath} to {fullItemDestinationPath} [copying]", ConsoleOutput.Verbosity.LowImportanceEvents);
 						currentSourceFile.CopyTo(fullItemDestinationPath);
 						thisTreeCompletedSizeInfo.fileCount_Unique++;
 						thisTreeCompletedSizeInfo.byteCount_Unique += currentSourceFile.Length;
@@ -155,7 +155,7 @@ namespace hlback.FileManagement
 					else
 					{
 						string linkFilePath = hardLinkMatch.MatchingFilePath;
-						userInterface.report(1, $"Backing up file {currentSourceFile.Name} to {fullItemDestinationPath} [identical existing file found; creating hardlink to {linkFilePath}]", ConsoleOutput.Verbosity.LowImportanceEvents);
+						userInterface.report(1, $"Backing up file {item.FullPath} to {fullItemDestinationPath} [identical existing file found; creating hardlink to {linkFilePath}]", ConsoleOutput.Verbosity.LowImportanceEvents);
 						hardLinker.createHardLink(fullItemDestinationPath, linkFilePath);
 					}
 					thisTreeCompletedSizeInfo.fileCount_All++;

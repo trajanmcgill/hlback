@@ -68,7 +68,7 @@ namespace hlback
 					// and the destination should now be set to the newest path argument.
 					if (backupDestinationRootPath != null)
 						commandLineSourcePaths.Add(backupDestinationRootPath); // CHANGE CODE HERE: need to 1) use the parent of the source path as the base, so the source path object itself gets copied; 2) handle that somehow even if that's a root directory; 3) allow the option of specifying a file source rather than a directory source.
-					backupDestinationRootPath = Path.GetFullPath(currentArgument);
+					backupDestinationRootPath = Path.GetFullPath(currentArgument + (Path.EndsInDirectorySeparator(currentArgument) ? "" : Path.DirectorySeparatorChar.ToString()));
 				}
 				else
 				{

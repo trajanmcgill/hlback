@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 
 namespace hlback.FileManagement
 {
@@ -7,12 +8,14 @@ namespace hlback.FileManagement
 		public enum ItemType { Directory, File }
 		
 		public readonly ItemType Type;
-		public readonly string PathFromBase;
+		public readonly string RelativePath;
+		public readonly string FullPath;
 
-		public BackupItemInfo(ItemType type, string pathFromBase)
+		public BackupItemInfo(ItemType type, string rootPath, string relativePath)
 		{
 			this.Type = type;
-			this.PathFromBase = pathFromBase;
+			this.RelativePath = relativePath;
+			this.FullPath = Path.Combine(rootPath, relativePath);
 		} // end BackupItemInfo() constructor
 		
 	} // end class BackupItemInfo
