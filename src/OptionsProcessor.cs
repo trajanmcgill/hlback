@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Collections.Generic;
+using System.Linq;
 using hlback.ErrorManagement;
 using hlback.FileManagement;
 
@@ -112,6 +113,10 @@ namespace hlback
 			// If a source paths file was specified, add all its source paths and rules to the list of source paths and rules.
 			if (sourcesFilePath != null)
 				sourcePaths.AddRange(readSourcePathsFile(sourcesFilePath));
+			
+			// If two sources have the same name, the second one to be backed up will clobber the first one. Don't allow this.
+			if (sourcePaths.GroupBy(source => source.Items.First().RelativePath).Any(group => (group.Count() > 1)))
+				throw new OptionsException("Multiple backup source items have the same name. Back up parent directory instead or back them up to separate destinations.");
 
 			// If, when processing all the arguments, we never encountered a source path or destination path, it is an error.
 			if (sourcePaths.Count < 1)
