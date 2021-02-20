@@ -144,6 +144,9 @@ namespace hlback.FileManagement
 							fileHash, currentSourceFile.Length,
 							currentSourceFile.LastWriteTimeUtc, maxHardLinksPerFile, maxDaysBeforeNewFullFileCopy);
 
+					// Ensure the destination directory for this file exists.
+					(new FileInfo(fullItemDestinationPath)).Directory.Create();
+
 					// Make a full copy of the file if needed, but otherwise create a hard link from a previous backup
 					if (hardLinkMatch == null)
 					{

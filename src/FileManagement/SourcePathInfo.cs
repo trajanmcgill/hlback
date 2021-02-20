@@ -49,9 +49,11 @@ namespace hlback.FileManagement
 						continue;
 					
 					if (individualRuleDefinition[0] == '+')				
-						Rules.Add((true, new Regex(individualRuleDefinition)));
+						Rules.Add((true, new Regex(individualRuleDefinition.Substring(1))));
 					else if (individualRuleDefinition[0] == '-')
-						Rules.Add((false, new Regex(individualRuleDefinition)));
+						Rules.Add((false, new Regex(individualRuleDefinition.Substring(1))));
+					else
+						throw new OptionsException($"Invalid rule definition specified: {individualRuleDefinition}");
 				}
 			}
 		} // end SourcePathInfo() constructor

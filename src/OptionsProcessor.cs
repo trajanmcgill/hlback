@@ -109,10 +109,12 @@ namespace hlback
 			foreach (string sourcePathString in commandLineSourcePaths)
 				sourcePaths.Add(new SourcePathInfo(sourcePathString, null));
 			
-			// ADD CODE HERE: read source paths file if one was specified
+			// If a source paths file was specified, add all its source paths and rules to the list of source paths and rules.
+			if (sourcesFilePath != null)
+				sourcePaths.AddRange(readSourcePathsFile(sourcesFilePath));
 
 			// If, when processing all the arguments, we never encountered a source path or destination path, it is an error.
-			if (commandLineSourcePaths.Count < 1)
+			if (sourcePaths.Count < 1)
 				throw new OptionsException($"No backup source path specified");
 			if (lastReadCommandLinePath == null)
 				throw new OptionsException($"No backup destination path specified");
@@ -130,6 +132,73 @@ namespace hlback
 
 			return config;
 		} // end getRuntimeConfiguration()
+
+
+		// readSourcePathsFile():
+		/// <summary>
+		/// 	Reads the specified file as a list of source paths and inclusion/exclusion rules for each source path.
+		/// 	Each source is specified by a line containing a source path, followed by a series of lines starting with '+' or '-'
+		/// 	which define inclusion or exclusion rules, respectively. Each rule is a simple regular expression to be applied to
+		/// 	items to see if they match, and each item will be tested by rules in the order those rules are defined.
+		/// </summary>
+		/// <returns>
+		/// A <c>List</c> of <c>SourcePathInfo</c> objects defining the source paths and rules for each defined in the file.
+		/// </returns>
+		/// <param name="filePath">A <c>string</c> containing the full path to a file to read as a list of source paths and rules.</param>
+		private static List<SourcePathInfo> readSourcePathsFile(string filePath)
+		{
+			List<SourcePathInfo> sourcePaths = new List<SourcePathInfo>(); // List to build and return.
+			
+			// Variables to hold info about the current working item.
+			string currentSourceItemPath = null;
+			List<string> currentRuleDefinitions = null;
+
+			// Open the file for reading.
+			using(StreamReader reader = new StreamReader(filePath))
+			{
+				// Read the entire file and parse it line by line.
+				for (string currentLine = reader.ReadLine(); currentLine != null; currentLine = reader.ReadLine())
+				{
+					// Ignore empty lines or those containing only whitespace.
+					if (currentLine.Trim().Length < 1)
+						continue;
+					
+					// Lines starting with a '+' or a '-' are interpreted as rules.
+					if (currentLine[0] == '+' || currentLine[0] == '-')
+					{
+						// A rule that comes where no path has yet been enountered is an error.
+						if (currentSourceItemPath == null)
+							throw new OptionsException($"Source paths file {filePath} contains a rule but no path to which to apply that rule.");
+						
+						// A '+' or '-' with nothing after it is invalid.
+						if (currentLine.Length < 2)
+							throw new OptionsException($"Source paths file {filePath} contains an empty rule.");
+						
+						// Add this line to the list of rules applying to the current source path.
+						currentRuleDefinitions.Add(currentLine);
+					}
+					else // Not a rule, so it must be the next source path.
+					{
+						// If we were already reading rules for a source path, this means we've completed reading the rule set for that one.
+						// Add that path and its rules to the list we will return from this function.
+						if (currentSourceItemPath != null)
+							sourcePaths.Add(new SourcePathInfo(currentSourceItemPath, currentRuleDefinitions));
+						
+						// Store the current line as the new source path, and reset the rule definitions list to empty
+						// before reading in the rules associated with this new source path.
+						currentSourceItemPath = Path.GetFullPath(currentLine);
+						currentRuleDefinitions = new List<string>();
+					} // end if / else on (currentLine[0] == '+' || currentLine[0] == '-')
+				} // end for loop iterating through lines of the file.
+
+				// We've reached the end of the file. If we were reading info about a source path,
+				// add that path and its rules to the list to return.
+				if (currentSourceItemPath != null)
+					sourcePaths.Add(new SourcePathInfo(currentSourceItemPath, currentRuleDefinitions));
+			}
+
+			return sourcePaths;
+		} // end readSourcePathsFile()
 
 
 		// identifySwitch():
