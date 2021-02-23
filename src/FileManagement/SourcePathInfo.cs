@@ -65,6 +65,7 @@ namespace hlback.FileManagement
 			{
 				// Item is a directory.
 				DirectoryInfo baseItem = new DirectoryInfo(BaseItemFullPath);
+DriveInfo di = new DriveInfo(baseItem.Root.FullName);
 				string baseContainerPath = baseItem.Parent.FullName;
 
 				// Return the base item itself as an item to be backed up.
