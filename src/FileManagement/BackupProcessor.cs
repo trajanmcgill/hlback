@@ -3,6 +3,7 @@ using System.IO;
 using System.Text;
 using System.Collections.ObjectModel;
 using System.Security.Cryptography;
+using System.Text.RegularExpressions;
 using hlback.Database;
 
 namespace hlback.FileManagement
@@ -72,9 +73,20 @@ namespace hlback.FileManagement
 			BackupSizeInfo completedBackupSizeInfo = new BackupSizeInfo { fileCount_All = 0, fileCount_Unique = 0, byteCount_All = 0, byteCount_Unique = 0 };
 			foreach (SourcePathInfo currentSourcePath in sourcePaths)
 			{
-				BackupSizeInfo currentSourceBackupSizeInfo =
-					makeFolderTreeBackup(currentSourcePath, destinationBaseDirectory,
-					                     database, totalExpectedSizeInfo, completedBackupSizeInfo);
+				BackupSizeInfo currentSourceBackupSizeInfo;
+				string driveName;
+
+				if (pathIsRootDirectory(currentSourcePath.BaseItemFullPath, out driveName))
+				{
+					currentSourceBackupSizeInfo =
+						makeFolderTreeBackup(currentSourcePath, driveName + "_root", database, totalExpectedSizeInfo, completedBackupSizeInfo);
+				}
+				else
+				{
+					currentSourceBackupSizeInfo =
+						makeFolderTreeBackup(currentSourcePath, destinationBaseDirectory.FullName, database, totalExpectedSizeInfo, completedBackupSizeInfo);
+				}
+				
 				completedBackupSizeInfo += currentSourceBackupSizeInfo;
 			}
 			DateTime copyEndTime = DateTime.Now;
@@ -92,6 +104,20 @@ namespace hlback.FileManagement
 			userInterface.report(1, $"Total files: {totalFiles} ({copiedFiles} new physical copies needed, {linkedFiles} hardlinks utilized)", ConsoleOutput.Verbosity.NormalEvents);
 			userInterface.report(1, $"Total bytes: {totalBytes} ({copiedBytes} physically copied, {linkedBytes} hardlinked)", ConsoleOutput.Verbosity.NormalEvents);
 		} // end doBackup()
+
+
+		private bool pathIsRootDirectory(string path, out string rootName)
+		{
+			bool isRoot;
+			
+			DirectoryInfo directory = new DirectoryInfo(path);
+			isRoot = (directory.Exists && directory.Parent == null);
+			
+			Regex nameExpr = new Regex("^[a-zA-Z0-9]");
+			rootName = isRoot ? nameExpr.Match(path).Value : null;
+
+			return isRoot; // CHANGE CODE HERE?
+		}
 
 
 		private DirectoryInfo createBackupTimeSubdirectory(DirectoryInfo baseDirectory)
@@ -119,16 +145,16 @@ namespace hlback.FileManagement
 
 
 		private BackupSizeInfo makeFolderTreeBackup(
-			SourcePathInfo sourcePath, DirectoryInfo destinationBaseDirectory,
+			SourcePathInfo sourceInfo, string destinationBasePath,
 			BackupsDatabase database, BackupSizeInfo totalExpectedBackupSize, BackupSizeInfo previouslyCompleteSizeInfo)
 		{
 			BackupSizeInfo thisTreeCompletedSizeInfo = new BackupSizeInfo() { fileCount_All = 0, fileCount_Unique = 0, byteCount_All = 0, byteCount_Unique = 0 };
 			int previousPercentComplete,
 				percentComplete = getCompletionPercentage(totalExpectedBackupSize.byteCount_All, previouslyCompleteSizeInfo.byteCount_All);
 			
-			foreach (BackupItemInfo item in sourcePath.Items)
+			foreach (BackupItemInfo item in sourceInfo.Items)
 			{
-				string fullItemDestinationPath = Path.Combine(destinationBaseDirectory.FullName, item.RelativePath);
+				string fullItemDestinationPath = Path.Combine(destinationBasePath, item.RelativePath);
 				if (item.Type == BackupItemInfo.ItemType.Directory)
 					(new DirectoryInfo(fullItemDestinationPath)).Create();
 				else // Item is a file.

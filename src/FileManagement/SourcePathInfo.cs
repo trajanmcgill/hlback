@@ -63,10 +63,10 @@ namespace hlback.FileManagement
 		{
 			if (Directory.Exists(BaseItemFullPath))
 			{
-				// Item is a directory.
+				// Base item is a directory.
 				DirectoryInfo baseItem = new DirectoryInfo(BaseItemFullPath);
-DriveInfo di = new DriveInfo(baseItem.Root.FullName);
-				string baseContainerPath = baseItem.Parent.FullName;
+
+				string baseContainerPath = baseItem.Parent != null ? baseItem.Parent.FullName : baseItem.FullName;
 
 				// Return the base item itself as an item to be backed up.
 				yield return new BackupItemInfo(BackupItemInfo.ItemType.Directory, baseContainerPath, baseItem.Name);
@@ -77,7 +77,7 @@ DriveInfo di = new DriveInfo(baseItem.Root.FullName);
 			}
 			else if (File.Exists(BaseItemFullPath))
 			{
-				// Item is a file.
+				// Base item is a file.
 				FileInfo baseItem = new FileInfo(BaseItemFullPath);
 				string baseContainerPath = baseItem.Directory.FullName;
 
