@@ -65,14 +65,24 @@ namespace hlback.FileManagement
 			{
 				// Base item is a directory.
 				DirectoryInfo baseItem = new DirectoryInfo(BaseItemFullPath);
+				string baseContainerPath, relativePath;
 
-				string baseContainerPath = baseItem.Parent != null ? baseItem.Parent.FullName : baseItem.FullName;
+				if (baseItem.Parent == null)
+				{
+					baseContainerPath = baseItem.FullName;
+					relativePath = "";
+				}
+				else
+				{
+					baseContainerPath = baseItem.Parent.FullName;
+					relativePath = baseItem.Name;
+				}
 
 				// Return the base item itself as an item to be backed up.
-				yield return new BackupItemInfo(BackupItemInfo.ItemType.Directory, baseContainerPath, baseItem.Name);
+				yield return new BackupItemInfo(BackupItemInfo.ItemType.Directory, baseContainerPath, relativePath);
 
 				// Return every item inside the base directory.
-				foreach (BackupItemInfo item in getItems(baseContainerPath, baseItem.Name, true))
+				foreach (BackupItemInfo item in getItems(baseContainerPath, relativePath, true))
 					yield return item;
 			}
 			else if (File.Exists(BaseItemFullPath))

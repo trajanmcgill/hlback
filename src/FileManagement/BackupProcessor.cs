@@ -79,12 +79,16 @@ namespace hlback.FileManagement
 				if (pathIsRootDirectory(currentSourcePath.BaseItemFullPath, out driveName))
 				{
 					currentSourceBackupSizeInfo =
-						makeFolderTreeBackup(currentSourcePath, driveName + "_root", database, totalExpectedSizeInfo, completedBackupSizeInfo);
+						makeFolderTreeBackup(
+							currentSourcePath, Path.Combine(destinationBaseDirectory.FullName, driveName + "_root"),
+							database, totalExpectedSizeInfo, completedBackupSizeInfo);
 				}
 				else
 				{
 					currentSourceBackupSizeInfo =
-						makeFolderTreeBackup(currentSourcePath, destinationBaseDirectory.FullName, database, totalExpectedSizeInfo, completedBackupSizeInfo);
+						makeFolderTreeBackup(
+							currentSourcePath, destinationBaseDirectory.FullName,
+							database, totalExpectedSizeInfo, completedBackupSizeInfo);
 				}
 				
 				completedBackupSizeInfo += currentSourceBackupSizeInfo;
