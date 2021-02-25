@@ -11,28 +11,6 @@ namespace hlback.FileManagement
 	class SourcePathInfo
 	{
 		public readonly string BaseItemFullPath;
-		
-		public BackupSizeInfo Size
-		{
-			get
-			{
-				if (_Size == null)
-					_Size = calculateSize();
-				return _Size;
-			}
-		} // end Size property
-
-		public IEnumerable<BackupItemInfo> Items
-		{
-			get
-			{
-				foreach (BackupItemInfo item in getAllItems())
-					yield return item;
-			}
-		} // end Items property
-
-
-		private BackupSizeInfo _Size = null;
 		private readonly List<(bool, Regex)> Rules;
 
 
@@ -59,7 +37,23 @@ namespace hlback.FileManagement
 		} // end SourcePathInfo() constructor
 
 
-		private IEnumerable<BackupItemInfo> getAllItems()
+		public BackupSizeInfo calculateSize()
+		{
+			long fileCount = 0, byteCount = 0;
+
+			foreach(BackupItemInfo file in getAllItems().Where(item => (item.Type == BackupItemInfo.ItemType.File)))
+			{
+				fileCount++;
+				byteCount += (new FileInfo(file.FullPath)).Length;
+			}
+			BackupSizeInfo totalSize =
+				new BackupSizeInfo { fileCount_All = fileCount, fileCount_Unique = fileCount, byteCount_All = byteCount, byteCount_Unique = byteCount };
+
+			return totalSize;
+		} // end calculateSize()
+
+
+		public IEnumerable<BackupItemInfo> getAllItems()
 		{
 			if (Directory.Exists(BaseItemFullPath))
 			{
@@ -139,22 +133,6 @@ namespace hlback.FileManagement
 
 			return useThisItem;
 		} // end itemAllowedByRules()
-
-
-		private BackupSizeInfo calculateSize()
-		{
-			long fileCount = 0, byteCount = 0;
-
-			foreach(BackupItemInfo file in this.Items.Where(item => (item.Type == BackupItemInfo.ItemType.File)))
-			{
-				fileCount++;
-				byteCount += (new FileInfo(file.FullPath)).Length;
-			}
-			BackupSizeInfo totalSize =
-				new BackupSizeInfo { fileCount_All = fileCount, fileCount_Unique = fileCount, byteCount_All = byteCount, byteCount_Unique = byteCount };
-
-			return totalSize;
-		} // end calculateSize()
 
 	} // end class SourcePathInfo
 }

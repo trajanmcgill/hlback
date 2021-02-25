@@ -115,7 +115,7 @@ namespace hlback
 				sourcePaths.AddRange(readSourcePathsFile(sourcesFilePath));
 			
 			// If two sources have the same name, the second one to be backed up will clobber the first one. Don't allow this.
-			if (sourcePaths.GroupBy(source => source.Items.First().RelativePath).Any(group => (group.Count() > 1)))
+			if (sourcePaths.GroupBy(source => source.getAllItems().First().RelativePath).Any(group => (group.Count() > 1)))
 				throw new OptionsException("Multiple backup source items have the same name. Back up parent directory instead or back them up to separate destinations.");
 
 			// If, when processing all the arguments, we never encountered a source path or destination path, it is an error.

@@ -52,7 +52,7 @@ namespace hlback.FileManagement
 			foreach (SourcePathInfo sourcePath in sourcePaths)
 			{
 				userInterface.report(1, $"Scanning {sourcePath.BaseItemFullPath}...", ConsoleOutput.Verbosity.NormalEvents);
-				BackupSizeInfo currentTreeSizeInfo = sourcePath.Size;
+				BackupSizeInfo currentTreeSizeInfo = sourcePath.calculateSize();
 
 				userInterface.report(2, $"Files found: {currentTreeSizeInfo.fileCount_All}; Bytes: {currentTreeSizeInfo.byteCount_All}", ConsoleOutput.Verbosity.NormalEvents);
 				totalExpectedSizeInfo += currentTreeSizeInfo;
@@ -156,7 +156,7 @@ namespace hlback.FileManagement
 			int previousPercentComplete,
 				percentComplete = getCompletionPercentage(totalExpectedBackupSize.byteCount_All, previouslyCompleteSizeInfo.byteCount_All);
 			
-			foreach (BackupItemInfo item in sourceInfo.Items)
+			foreach (BackupItemInfo item in sourceInfo.getAllItems())
 			{
 				string fullItemDestinationPath = Path.Combine(destinationBasePath, item.RelativePath);
 				if (item.Type == BackupItemInfo.ItemType.Directory)
