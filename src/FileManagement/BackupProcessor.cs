@@ -5,6 +5,7 @@ using System.Collections.ObjectModel;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using hlback.Database;
+using System.Linq;
 
 namespace hlback.FileManagement
 {
@@ -120,7 +121,7 @@ namespace hlback.FileManagement
 			Regex nameExpr = new Regex("^[a-zA-Z0-9]");
 			rootName = isRoot ? nameExpr.Match(path).Value : null;
 
-			return isRoot; // CHANGE CODE HERE?
+			return isRoot;
 		}
 
 

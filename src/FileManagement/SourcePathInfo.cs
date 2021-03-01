@@ -55,84 +55,8 @@ namespace hlback.FileManagement
 
 		public IEnumerable<BackupItemInfo> getAllItems()
 		{
-			if (Directory.Exists(BaseItemFullPath))
-			{
-				// Base item is a directory.
-				DirectoryInfo baseItem = new DirectoryInfo(BaseItemFullPath);
-				string baseContainerPath, relativePath;
-
-				if (baseItem.Parent == null)
-				{
-					baseContainerPath = baseItem.FullName;
-					relativePath = "";
-				}
-				else
-				{
-					baseContainerPath = baseItem.Parent.FullName;
-					relativePath = baseItem.Name;
-				}
-
-				// Return the base item itself as an item to be backed up.
-				yield return new BackupItemInfo(BackupItemInfo.ItemType.Directory, baseContainerPath, relativePath);
-
-				// Return every item inside the base directory.
-				foreach (BackupItemInfo item in getItems(baseContainerPath, relativePath, true))
-					yield return item;
-			}
-			else if (File.Exists(BaseItemFullPath))
-			{
-				// Base item is a file.
-				FileInfo baseItem = new FileInfo(BaseItemFullPath);
-				string baseContainerPath = baseItem.Directory.FullName;
-
-				// Return the file item to be backed up.
-				yield return new BackupItemInfo(BackupItemInfo.ItemType.File, baseContainerPath, baseItem.Name);
-			}
-			else // Item doesn't exist at all or isn't accessible
-				throw new PathException($"Item not found or not accessible: {BaseItemFullPath}");
+			return new FileSystemWalker(BaseItemFullPath, Rules);
 		} // end getAllItems()
-
-
-		private IEnumerable<BackupItemInfo> getItems(string baseContainerPath, string startingPointRelativePath, bool defaultUsability)
-		{
-			DirectoryInfo currentDirectory = new DirectoryInfo(Path.Combine(baseContainerPath, startingPointRelativePath));
-			
-			foreach (DirectoryInfo subDirectory in currentDirectory.EnumerateDirectories())
-			{
-				string subDirectoryPathFromBase = Path.Combine(startingPointRelativePath, subDirectory.Name);
-				bool thisSubDirectoryIncluded = itemAllowedByRules(subDirectoryPathFromBase, defaultUsability);
-
-				if (thisSubDirectoryIncluded)
-					yield return new BackupItemInfo(BackupItemInfo.ItemType.Directory, baseContainerPath, subDirectoryPathFromBase);
-
-				foreach (BackupItemInfo item in getItems(baseContainerPath, subDirectoryPathFromBase, thisSubDirectoryIncluded))
-					yield return item;
-			}
-
-			foreach (FileInfo file in currentDirectory.EnumerateFiles())
-			{
-				string filePathFromBase = Path.Combine(startingPointRelativePath, file.Name);
-				if (itemAllowedByRules(filePathFromBase, defaultUsability))
-					yield return new BackupItemInfo(BackupItemInfo.ItemType.File, baseContainerPath, filePathFromBase);
-			}
-		} // end getItems()
-
-
-		private bool itemAllowedByRules(string path, bool defaultUsability)
-		{
-			bool useThisItem = defaultUsability;
-
-			if (Rules.Count > 0)
-			{
-				foreach ((bool includeMatchingItems, Regex expression) rule in Rules)
-				{
-					if (rule.expression.IsMatch(path))
-						useThisItem = rule.includeMatchingItems;
-				}
-			}
-
-			return useThisItem;
-		} // end itemAllowedByRules()
 
 	} // end class SourcePathInfo
 }

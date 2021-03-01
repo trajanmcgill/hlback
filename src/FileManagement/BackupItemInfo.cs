@@ -5,7 +5,7 @@ namespace hlback.FileManagement
 {
 	class BackupItemInfo
 	{
-		public enum ItemType { Directory, File }
+		public enum ItemType { Directory, UnreadableDirectory, File }
 		
 		public readonly ItemType Type;
 		public readonly string RelativePath;
