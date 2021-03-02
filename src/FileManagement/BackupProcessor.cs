@@ -104,11 +104,15 @@ namespace hlback.FileManagement
 
 			int totalTime = (int)Math.Round(copyEndTime.Subtract(copyStartTime).TotalSeconds);
 			long totalFiles = completedBackupSizeInfo.fileCount_All,
-				copiedFiles = completedBackupSizeInfo.fileCount_Unique,
-				linkedFiles = totalFiles - copiedFiles;
+				physicallyCopiedFiles = completedBackupSizeInfo.fileCount_Unique,
+				skippedFiles = completedBackupSizeInfo.fileCount_Skip,
+				linkedFiles = totalFiles - physicallyCopiedFiles - skippedFiles,
+				allCopiedFiles = totalFiles - skippedFiles;
 			long totalBytes = completedBackupSizeInfo.byteCount_All,
-				copiedBytes = completedBackupSizeInfo.byteCount_Unique,
-				linkedBytes = totalBytes - copiedBytes;
+				physicallyCopiedBytes = completedBackupSizeInfo.byteCount_Unique,
+				skippedBytes = completedBackupSizeInfo.byteCount_Skip,
+				linkedBytes = totalBytes - physicallyCopiedBytes - skippedBytes,
+				allCopiedBytes = totalBytes - skippedBytes;
 
 			userInterface.report($"Backup complete.", ConsoleOutput.Verbosity.NormalEvents);
 
@@ -121,8 +125,10 @@ namespace hlback.FileManagement
 			}
 
 			userInterface.report(1, $"Copy process duration: {totalTime} seconds.", ConsoleOutput.Verbosity.NormalEvents);
-			userInterface.report(1, $"Total files: {totalFiles} ({copiedFiles} new physical copies needed, {linkedFiles} hardlinks utilized)", ConsoleOutput.Verbosity.NormalEvents);
-			userInterface.report(1, $"Total bytes: {totalBytes} ({copiedBytes} physically copied, {linkedBytes} hardlinked)", ConsoleOutput.Verbosity.NormalEvents);
+			userInterface.report(1, $"Total files copied: {allCopiedFiles} ({physicallyCopiedFiles} new physical copies needed, {linkedFiles} hardlinks utilized)", ConsoleOutput.Verbosity.NormalEvents);
+			userInterface.report(1, $"Total bytes copied: {allCopiedBytes} ({physicallyCopiedBytes} physically copied, {linkedBytes} hardlinked)", ConsoleOutput.Verbosity.NormalEvents);
+			if (skippedFiles > 0)
+				userInterface.report(1, $"Skipped: {skippedFiles} files ({skippedBytes} bytes)", ConsoleOutput.Verbosity.NormalEvents);
 		} // end doBackup()
 
 
@@ -190,6 +196,13 @@ namespace hlback.FileManagement
 					catch (UnauthorizedAccessException)
 					{
 						backupProcessWarnings.Add($"File skipped due to unauthorized access error: {item.RelativePath}");
+						thisTreeCompletedSizeInfo.fileCount_Skip++;
+						thisTreeCompletedSizeInfo.fileCount_All++;
+						thisTreeCompletedSizeInfo.byteCount_Skip += currentSourceFile.Length;
+						thisTreeCompletedSizeInfo.byteCount_All += currentSourceFile.Length;
+						previousPercentComplete = percentComplete;
+						percentComplete = getCompletionPercentage(totalExpectedBackupSize.byteCount_All, previouslyCompleteSizeInfo.byteCount_All + thisTreeCompletedSizeInfo.byteCount_All);
+						userInterface.reportProgress(percentComplete, previousPercentComplete, ConsoleOutput.Verbosity.NormalEvents);
 						continue;
 					}
 
