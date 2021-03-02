@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Text;
 using System.Collections.ObjectModel;
+using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using hlback.Database;
@@ -23,6 +24,8 @@ namespace hlback.FileManagement
 		private readonly string backupsDestinationRootPath;
 		private readonly ConsoleOutput userInterface;
 
+		private List<string> backupProcessWarnings;
+
 
 		public BackupProcessor(Configuration configuration, ConsoleOutput userInterface)
 		{
@@ -41,12 +44,15 @@ namespace hlback.FileManagement
 			sourcePaths = configuration.BackupSourcePaths;
 			backupsDestinationRootPath = configuration.BackupDestinationPath;
 			
+			backupProcessWarnings = new List<string>();
+
 			this.userInterface = userInterface;
 		} // end BackupProcessor constructor
 
 
 		public void doBackup()
 		{
+			backupProcessWarnings.Clear();
 			BackupSizeInfo totalExpectedSizeInfo = new BackupSizeInfo() { fileCount_All = 0, fileCount_Unique = 0, byteCount_All = 0, byteCount_Unique = 0 };
 
 			userInterface.report("Scanning source directory trees:", ConsoleOutput.Verbosity.NormalEvents);
@@ -105,6 +111,15 @@ namespace hlback.FileManagement
 				linkedBytes = totalBytes - copiedBytes;
 
 			userInterface.report($"Backup complete.", ConsoleOutput.Verbosity.NormalEvents);
+
+			if (backupProcessWarnings.Count > 0)
+			{
+				userInterface.report("", ConsoleOutput.Verbosity.NormalEvents);
+				foreach (string warning in backupProcessWarnings)
+					userInterface.report($"Warning: {warning}", ConsoleOutput.Verbosity.ErrorsAndWarnings);
+				userInterface.report("", ConsoleOutput.Verbosity.NormalEvents);
+			}
+
 			userInterface.report(1, $"Copy process duration: {totalTime} seconds.", ConsoleOutput.Verbosity.NormalEvents);
 			userInterface.report(1, $"Total files: {totalFiles} ({copiedFiles} new physical copies needed, {linkedFiles} hardlinks utilized)", ConsoleOutput.Verbosity.NormalEvents);
 			userInterface.report(1, $"Total bytes: {totalBytes} ({copiedBytes} physically copied, {linkedBytes} hardlinked)", ConsoleOutput.Verbosity.NormalEvents);
@@ -162,11 +177,21 @@ namespace hlback.FileManagement
 				string fullItemDestinationPath = Path.Combine(destinationBasePath, item.RelativePath);
 				if (item.Type == BackupItemInfo.ItemType.Directory)
 					(new DirectoryInfo(fullItemDestinationPath)).Create();
+				else if (item.Type == BackupItemInfo.ItemType.UnreadableDirectory)
+					backupProcessWarnings.Add($"Directory skipped due to unauthorized access error: {item.RelativePath}");
 				else // Item is a file.
 				{
 					// Figure out the source file hash.
 					FileInfo currentSourceFile = new FileInfo(item.FullPath);
-					string fileHash = getHash(currentSourceFile);
+					string fileHash;
+					
+					try
+					{ fileHash = getHash(currentSourceFile); }
+					catch (UnauthorizedAccessException)
+					{
+						backupProcessWarnings.Add($"File skipped due to unauthorized access error: {item.RelativePath}");
+						continue;
+					}
 
 					// Look in the database and find an existing, previously backed up file to create a hard link to,
 					// if any exists within the current run's rules for using links.
