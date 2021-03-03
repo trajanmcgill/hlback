@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Text.RegularExpressions;
 using System.Collections.Generic;
 using System.Linq;
 using hlback.ErrorManagement;
@@ -156,7 +157,7 @@ namespace hlback
 			
 			// Variables to hold info about the current working item.
 			string currentSourceItemPath = null;
-			List<string> currentRuleDefinitions = null;
+			RuleSet currentRuleSet = new RuleSet();
 
 			// Open the file for reading.
 			using(StreamReader reader = new StreamReader(filePath))
@@ -168,42 +169,77 @@ namespace hlback
 					if (currentLine.Trim().Length < 1)
 						continue;
 					
-					// Lines starting with a '+' or a '-' are interpreted as rules.
-					if (currentLine[0] == '+' || currentLine[0] == '-')
+					RuleSet.AllowanceType? ruleType;
+					Regex ruleDefinition;
+					if (tryParseAsRule(currentLine, out ruleType, out ruleDefinition))
 					{
 						// A rule that comes where no path has yet been enountered is an error.
 						if (currentSourceItemPath == null)
 							throw new OptionsException($"Source paths file {filePath} contains a rule but no path to which to apply that rule.");
 						
-						// A '+' or '-' with nothing after it is invalid.
-						if (currentLine.Length < 2)
-							throw new OptionsException($"Source paths file {filePath} contains an empty rule.");
-						
-						// Add this line to the list of rules applying to the current source path.
-						currentRuleDefinitions.Add(currentLine);
+						// Add this rule to the set of rules applying to the current source path.
+						currentRuleSet.addRule((RuleSet.AllowanceType)ruleType, ruleDefinition);
 					}
 					else // Not a rule, so it must be the next source path.
 					{
 						// If we were already reading rules for a source path, this means we've completed reading the rule set for that one.
 						// Add that path and its rules to the list we will return from this function.
 						if (currentSourceItemPath != null)
-							sourcePaths.Add(new SourcePathInfo(currentSourceItemPath, currentRuleDefinitions));
+							sourcePaths.Add(new SourcePathInfo(currentSourceItemPath, currentRuleSet));
 						
-						// Store the current line as the new source path, and reset the rule definitions list to empty
+						// Store the current line as the new source path, and reset the rule definitions to an empty set
 						// before reading in the rules associated with this new source path.
 						currentSourceItemPath = Path.GetFullPath(currentLine);
-						currentRuleDefinitions = new List<string>();
+						currentRuleSet = new RuleSet();
 					} // end if / else on (currentLine[0] == '+' || currentLine[0] == '-')
 				} // end for loop iterating through lines of the file.
 
 				// We've reached the end of the file. If we were reading info about a source path,
 				// add that path and its rules to the list to return.
 				if (currentSourceItemPath != null)
-					sourcePaths.Add(new SourcePathInfo(currentSourceItemPath, currentRuleDefinitions));
+					sourcePaths.Add(new SourcePathInfo(currentSourceItemPath, currentRuleSet));
 			}
 
 			return sourcePaths;
 		} // end readSourcePathsFile()
+
+
+		private static bool tryParseAsRule(string potentialRule, out RuleSet.AllowanceType? type, out Regex definition)
+		{
+			bool isRule;
+			type = null;
+			definition = null;
+
+			if (potentialRule == null || potentialRule.Length < 1)
+				isRule = false;
+			else
+			{
+				string definitionString = potentialRule.Substring(1);
+
+				if (potentialRule[0] == '+')
+				{
+					isRule = true;
+					type = RuleSet.AllowanceType.Allowed;
+				}
+				else if (potentialRule[0] == '-')
+				{
+					isRule = true;
+					type = RuleSet.AllowanceType.Disallowed;
+				}
+				else if (potentialRule[0] == '!')
+				{
+					isRule = true;
+					type = RuleSet.AllowanceType.TreeDisallowed;
+				}
+				else
+					isRule = false;
+				
+				if (isRule)
+					definition = new Regex(definitionString);
+			}
+
+			return isRule;
+		} // end tryParseAsRule()
 
 
 		// identifySwitch():

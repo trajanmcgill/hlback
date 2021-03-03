@@ -58,7 +58,7 @@ namespace hlback
 			if (importance >= verbosity)
 			{
 				reportingProgress = true;
-				if (newCompletionPercentage - lastCompletionPercentage > ReportableProgressDifference)
+				if (newCompletionPercentage - lastCompletionPercentage >= ReportableProgressDifference)
 				{
 					if (reportingProgress)
 						Console.Write(new string ('\b', 14)); // backspaces to the beginning of the line

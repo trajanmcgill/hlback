@@ -8,7 +8,7 @@ namespace hlback.FileManagement
 	class FileSystemWalker : IEnumerable<BackupItemInfo>
 	{
 		private readonly string StartingPath;
-		private readonly List<(bool, Regex)> Rules;
+		private readonly RuleSet Rules;
 
 		public IEnumerator<BackupItemInfo> GetEnumerator()
 		{	return new FileSystemWalkEnumerator(StartingPath, Rules);	}
@@ -17,10 +17,11 @@ namespace hlback.FileManagement
 		{	return this.GetEnumerator();	}
 
 
-		public FileSystemWalker(string startingPath, List<(bool, Regex)> rules)
+		public FileSystemWalker(string startingPath, RuleSet rules)
 		{
 			this.StartingPath = startingPath;
 			this.Rules = rules;
 		}
+
 	} // end class FileSystemWalker
 }

@@ -10,7 +10,7 @@ namespace hlback.FileManagement
 	class FileSystemWalkEnumerator : IEnumerator<BackupItemInfo>
 	{
 		private readonly string StartingPath;
-		private readonly List<(bool, Regex)> Rules;
+		private readonly RuleSet Rules;
 		private FileSystemWalkLevel CurrentLevelSearchData;
 		private readonly Stack<FileSystemWalkLevel> SearchStack;
 		
@@ -24,11 +24,11 @@ namespace hlback.FileManagement
 		object IEnumerator.Current { get { return Current; } }
 
 
-		public FileSystemWalkEnumerator(string startingPath, List<(bool, Regex)> rules)
+		public FileSystemWalkEnumerator(string startingPath, RuleSet rules)
 		{
 			this.StartingPath = startingPath;
 			this.SearchStack = new Stack<FileSystemWalkLevel>();
-			this.Rules = rules;
+			this.Rules = rules ?? new RuleSet();
 			Reset();
 		} // end FileSystemWalkEnumerator constructor
 
@@ -73,7 +73,8 @@ namespace hlback.FileManagement
 					{
 						FileInfo file = CurrentLevelSearchData.Files.Current;
 						string relativePath = Path.Combine(CurrentLevelSearchData.RelativePath, file.Name);
-						if (itemAllowedByRules(relativePath, CurrentLevelSearchData.ThisItemAllowedByRules))
+						RuleSet.AllowanceType itemAllowance = Rules.checkPath(relativePath, CurrentLevelSearchData.ThisItemAllowedByRules);
+						if (itemAllowance == RuleSet.AllowanceType.Allowed)
 						{
 							CurrentIteratorItem = new BackupItemInfo(BackupItemInfo.ItemType.File, BaseContainerPath, relativePath);
 							break;
@@ -85,15 +86,21 @@ namespace hlback.FileManagement
 					{
 						DirectoryInfo nextLevelDirectory = CurrentLevelSearchData.SubDirectories.Current;
 						string nextLevelRelativePath = Path.Combine(CurrentLevelSearchData.RelativePath, nextLevelDirectory.Name);
+
 						IEnumerator<FileInfo> nextLevelFiles;
 						IEnumerator<DirectoryInfo> nextLevelSubDirectories;
 						bool ableToReadSubDirectory = tryOpeningDirectory(nextLevelDirectory, out nextLevelFiles, out nextLevelSubDirectories);
-						bool subDirectoryAllowedByRules = itemAllowedByRules(nextLevelRelativePath, CurrentLevelSearchData.ThisItemAllowedByRules);
-						if (ableToReadSubDirectory)
+
+						RuleSet.AllowanceType subDirectoryAllowance = Rules.checkPath(nextLevelRelativePath, CurrentLevelSearchData.ThisItemAllowedByRules);
+						bool subDirectoryAllowedByRules = (subDirectoryAllowance == RuleSet.AllowanceType.Allowed);
+
+						if (ableToReadSubDirectory && subDirectoryAllowance != RuleSet.AllowanceType.TreeDisallowed)
 						{
 							SearchStack.Push(CurrentLevelSearchData);
-							CurrentLevelSearchData = new FileSystemWalkLevel(nextLevelRelativePath, nextLevelFiles, nextLevelSubDirectories, subDirectoryAllowedByRules);
+							CurrentLevelSearchData =
+								new FileSystemWalkLevel(nextLevelRelativePath, nextLevelFiles, nextLevelSubDirectories, subDirectoryAllowedByRules);
 						}
+
 						if (subDirectoryAllowedByRules)
 						{
 							CurrentIteratorItem =
@@ -114,7 +121,7 @@ namespace hlback.FileManagement
 							// We're all the way to the top level. We've reached the end.
 							CurrentIteratorItem = null;
 							returnValue = false;
-							break;
+							IsStillIterating = false;
 						}
 					}
 				} // end while (isStillIterating)
@@ -186,23 +193,6 @@ namespace hlback.FileManagement
 			}
 			return outcome;
 		} // end tryOpeningDirectory()
-
-
-		private bool itemAllowedByRules(string path, bool defaultUsability)
-		{
-			bool useThisItem = defaultUsability;
-
-			if (Rules.Count > 0)
-			{
-				foreach ((bool includeMatchingItems, Regex expression) rule in Rules)
-				{
-					if (rule.expression.IsMatch(path))
-						useThisItem = rule.includeMatchingItems;
-				}
-			}
-
-			return useThisItem;
-		} // end itemAllowedByRules()
 
 	} // end class FileSystemWalkEnumerator
 }
