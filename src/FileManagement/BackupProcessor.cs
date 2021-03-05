@@ -168,6 +168,9 @@ namespace hlback.FileManagement
 		
 		private int getCompletionPercentage(long totalBytes, long completedBytes)
 		{
+			if (totalBytes == 0)
+				return 100;
+			
 			return (int)Math.Floor(100 * (decimal)completedBytes / (decimal)totalBytes);
 		} // end completionPercentage()
 
