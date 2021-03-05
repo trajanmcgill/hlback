@@ -25,8 +25,8 @@ namespace hlback
 
 
 		// Define default values for optional arguments.
-        private const int DefaultMaxHardLinksPerPhysicalFile = 5; // CHANGE CODE HERE
-        private const int DefaultMaxDaysBeforeNewFullFileCopy = 5; // CHANGE CODE HERE
+        private static readonly int? DefaultMaxHardLinksPerPhysicalFile = null;
+        private static readonly int? DefaultMaxDaysBeforeNewFullFileCopy = null;
 
 
 		// getRuntimeConfiguration():
