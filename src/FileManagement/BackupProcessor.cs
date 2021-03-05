@@ -67,41 +67,52 @@ namespace hlback.FileManagement
 
 			userInterface.report(1, $"Total files found: {totalExpectedSizeInfo.fileCount_All:n0}; Total Bytes: {totalExpectedSizeInfo.byteCount_All:n0}", ConsoleOutput.Verbosity.NormalEvents);
 
-			// Get the backups root directory and get or create the backups database at that location,
-			// and set up variables used for tracking the backup process.
-			DirectoryInfo backupsRootDirectory = new DirectoryInfo(backupsDestinationRootPath);
+			// Set up variables used for tracking the backup process.
 			BackupSizeInfo completedBackupSizeInfo = new BackupSizeInfo { fileCount_All = 0, fileCount_Unique = 0, byteCount_All = 0, byteCount_Unique = 0 };
 			DateTime copyStartTime = DateTime.Now;
-			using(BackupsDatabase database = new BackupsDatabase(backupsDestinationRootPath, userInterface))
+			
+			try
 			{
-				// Create subdirectory for this new backup.
-				DirectoryInfo destinationBaseDirectory = createBackupTimeSubdirectory(backupsRootDirectory);
-				userInterface.report($"Backing up to {destinationBaseDirectory.FullName}", ConsoleOutput.Verbosity.NormalEvents);
+				// Get the backups root directory and ensure it exists.
+				DirectoryInfo backupsRootDirectory = new DirectoryInfo(backupsDestinationRootPath);
+				backupsRootDirectory.Create();
 
-				// Copy all the files.
-				foreach (SourcePathInfo currentSourcePath in sourcePaths)
+				using(BackupsDatabase database = new BackupsDatabase(backupsDestinationRootPath, userInterface))
 				{
-					BackupSizeInfo currentSourceBackupSizeInfo;
-					string driveName;
+					// Create subdirectory for this new backup.
+					DirectoryInfo destinationBaseDirectory = createBackupTimeSubdirectory(backupsRootDirectory);
+					userInterface.report($"Backing up to {destinationBaseDirectory.FullName}", ConsoleOutput.Verbosity.NormalEvents);
 
-					if (pathIsRootDirectory(currentSourcePath.BaseItemFullPath, out driveName))
+					// Copy all the files.
+					foreach (SourcePathInfo currentSourcePath in sourcePaths)
 					{
-						currentSourceBackupSizeInfo =
-							makeFolderTreeBackup(
-								currentSourcePath, Path.Combine(destinationBaseDirectory.FullName, driveName + "_root"),
-								database, totalExpectedSizeInfo, completedBackupSizeInfo);
+						BackupSizeInfo currentSourceBackupSizeInfo;
+						string driveName;
+
+						if (pathIsRootDirectory(currentSourcePath.BaseItemFullPath, out driveName))
+						{
+							currentSourceBackupSizeInfo =
+								makeFolderTreeBackup(
+									currentSourcePath, Path.Combine(destinationBaseDirectory.FullName, driveName + "_root"),
+									database, totalExpectedSizeInfo, completedBackupSizeInfo);
+						}
+						else
+						{
+							currentSourceBackupSizeInfo =
+								makeFolderTreeBackup(
+									currentSourcePath, destinationBaseDirectory.FullName,
+									database, totalExpectedSizeInfo, completedBackupSizeInfo);
+						}
+						
+						completedBackupSizeInfo += currentSourceBackupSizeInfo;
 					}
-					else
-					{
-						currentSourceBackupSizeInfo =
-							makeFolderTreeBackup(
-								currentSourcePath, destinationBaseDirectory.FullName,
-								database, totalExpectedSizeInfo, completedBackupSizeInfo);
-					}
-					
-					completedBackupSizeInfo += currentSourceBackupSizeInfo;
-				}
-			} // end using(database)
+				} // end using(database)
+			}
+			catch(System.IO.PathTooLongException ex)
+			{
+				userInterface.report($"Error: Path too long: {ex.Message}", ConsoleOutput.Verbosity.ErrorsAndWarnings);
+				userInterface.report("You may need to enable long path support for your operating system, use a file system which supports longer paths (e.g., NTFS, ext3, or ext4 rather than FAT), or create a symbolic link to the destination directory to shorten the path string.", ConsoleOutput.Verbosity.ErrorsAndWarnings);
+			}
 			DateTime copyEndTime = DateTime.Now;
 
 			int totalTime = (int)Math.Round(copyEndTime.Subtract(copyStartTime).TotalSeconds);
