@@ -198,9 +198,12 @@ namespace hlback.FileManagement
 					
 					try
 					{ fileHash = getHash(currentSourceFile); }
-					catch (UnauthorizedAccessException)
+					catch (Exception ex) when (ex is UnauthorizedAccessException || ex is System.IO.IOException)
 					{
-						backupProcessWarnings.Add($"File skipped due to unauthorized access error: {item.RelativePath}");
+						if (ex is UnauthorizedAccessException)
+							backupProcessWarnings.Add($"File skipped due to unauthorized access error: {item.RelativePath}");
+						else
+							backupProcessWarnings.Add($"File skipped, unable to read. Another process may be using the file: {item.RelativePath}");
 						thisTreeCompletedSizeInfo.fileCount_Skip++;
 						thisTreeCompletedSizeInfo.fileCount_All++;
 						thisTreeCompletedSizeInfo.byteCount_Skip += currentSourceFile.Length;
