@@ -4,8 +4,12 @@ using hlback.FileManagement;
 
 namespace hlback
 {
+	// Program:
+	/// <summary>Overall application class for hlback.</summary>
     class Program
     {
+		// ExitCode:
+		/// <summary>Defines possible return values for the application and their meanings.</summary>
 		private enum ExitCode : int
 		{
 			Success = 0,
@@ -14,28 +18,40 @@ namespace hlback
 		}
 
 
-        static int Main(string[] args)
+        // Main:
+		/// <summary>Entry point for application.</summary>
+		/// <returns>An <c>int</c> value corresponding to a <c>Program.ExitCode</c> enum value, indicating the application's success or failure.</returns>
+		/// <param name="args">An array of all the arguments specified on the command line.</param>
+		static int Main(string[] args)
         {
+			// Set up objects containing the configuration info for this run and the UI object for output.
 			Configuration config;
 			ConsoleOutput userInterface = new ConsoleOutput(ConsoleOutput.Verbosity.NormalEvents);
 
+			// Fill in the configuration object for this run, based on reading the command-line arguments.
 			try { config = OptionsProcessor.getRuntimeConfiguration(args); }
 			catch (ErrorManagement.OptionsException e)
 			{
+				// There was an invalid option specified. Tell the user and exit with an error code.
 				userInterface.report("", ConsoleOutput.Verbosity.ErrorsAndWarnings);
 				userInterface.report($"Error: {e.Message}", ConsoleOutput.Verbosity.ErrorsAndWarnings);
 				printUsage(userInterface);
 				return (int)ExitCode.Error_Usage;
 			}
 
+			// Create a BackupProcessor object, set it to use the current run-time configuration and UI object,
+			// and run the backup process.
 			BackupProcessor backupProcessor = new BackupProcessor(config, userInterface);
-			
 			backupProcessor.doBackup();
 			
+			// Job is complete; exist the application returning a success code.
 			return (int)ExitCode.Success;
         } // end Main()
 
 
+        // printUsage:
+		/// <summary>Prints the application usage to the specified UI.</summary>
+		/// <param name="userInterface">A <c>ConsoleOutput</c> object to which to send the usage instructions string.</param>
 		private static void printUsage(ConsoleOutput userInterface)
 		{
 			userInterface.report("", ConsoleOutput.Verbosity.ErrorsAndWarnings);

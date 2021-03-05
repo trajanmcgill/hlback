@@ -143,9 +143,10 @@ namespace hlback
 		// readSourcePathsFile():
 		/// <summary>
 		/// 	Reads the specified file as a list of source paths and inclusion/exclusion rules for each source path.
-		/// 	Each source is specified by a line containing a source path, followed by a series of lines starting with '+' or '-'
-		/// 	which define inclusion or exclusion rules, respectively. Each rule is a simple regular expression to be applied to
-		/// 	items to see if they match, and each item will be tested by rules in the order those rules are defined.
+		/// 	Each source is specified by a line containing a source path, followed by a series of inclusion and exclusion rules.
+		/// 	Each rule is a '+' for inclusion, '-' for exclusion, or '!' to completely ignore an entire directory tree,
+		///     followed by a simple regular expression to be applied to items to see if they match.
+		///		Each item will be tested by rules in the order those rules are defined.
 		/// </summary>
 		/// <returns>
 		/// A <c>List</c> of <c>SourcePathInfo</c> objects defining the source paths and rules for each defined in the file.
@@ -204,18 +205,30 @@ namespace hlback
 		} // end readSourcePathsFile()
 
 
+		// tryParseAsRule:
+		/// <summary>
+		/// 	Takes a string and tries to parse it as an inclusion/exclusion rule.
+		/// 	A valid rule is a '+' for inclusion, '-' for exclusion, or '!' to completely ignore an entire directory tree,
+		///     followed by a simple regular expression to be applied to items to see if they match.
+		/// </summary>
+		/// <returns><c>true</c> if the string could be parsed as a rule, <c>false</c> otherwise.</returns>
+		/// <param name="potentialRule">A <c>string</c> to be tested and parsed as an inclusion or exclusion rule.</param>
+		/// <param name="type"><c>out</c>: nullable <c>RuleSet.AllowanceType</c> which contains the rule type if parsed successfully, or <c>null</c> if not.</param>
+		/// <param name="definition"><c>out</c>: A <c>Regex</c> which contains the rule definition (for matching to file paths) if parsed successfully, or <c>null</c> if not.</param>
 		private static bool tryParseAsRule(string potentialRule, out RuleSet.AllowanceType? type, out Regex definition)
 		{
 			bool isRule;
+			
+			// Default out values.
 			type = null;
 			definition = null;
 
 			if (potentialRule == null || potentialRule.Length < 1)
-				isRule = false;
+				isRule = false; // Null or zero-length strings are not valid rules.
 			else
 			{
-				string definitionString = potentialRule.Substring(1);
-
+				// Examine the first character of the rule to see if it is a valid indicator character.
+				// If so, set the type it indicates and set the return value to true.
 				if (potentialRule[0] == '+')
 				{
 					isRule = true;
@@ -234,8 +247,9 @@ namespace hlback
 				else
 					isRule = false;
 				
+				// If the string began with a valid rule type indicator, create a rule definition regular expression from the remainder of the string.
 				if (isRule)
-					definition = new Regex(definitionString);
+					definition = new Regex(potentialRule.Substring(1));
 			}
 
 			return isRule;
