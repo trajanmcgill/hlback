@@ -65,7 +65,7 @@ namespace hlback.FileManagement
 				totalExpectedSizeInfo += currentTreeSizeInfo;
 			}
 
-			userInterface.report(1, $"Total files found: {totalExpectedSizeInfo.fileCount_All}; Total Bytes: {totalExpectedSizeInfo.byteCount_All}", ConsoleOutput.Verbosity.NormalEvents);
+			userInterface.report(1, $"Total files found: {totalExpectedSizeInfo.fileCount_All:n0}; Total Bytes: {totalExpectedSizeInfo.byteCount_All:n0}", ConsoleOutput.Verbosity.NormalEvents);
 
 			// Get the backups root directory and get or create the backups database at that location.
 			DirectoryInfo backupsRootDirectory = new DirectoryInfo(backupsDestinationRootPath);
@@ -124,11 +124,11 @@ namespace hlback.FileManagement
 				userInterface.report("", ConsoleOutput.Verbosity.NormalEvents);
 			}
 
-			userInterface.report(1, $"Copy process duration: {totalTime} seconds.", ConsoleOutput.Verbosity.NormalEvents);
-			userInterface.report(1, $"Total files copied: {allCopiedFiles} ({physicallyCopiedFiles} new physical copies needed, {linkedFiles} hardlinks utilized)", ConsoleOutput.Verbosity.NormalEvents);
-			userInterface.report(1, $"Total bytes copied: {allCopiedBytes} ({physicallyCopiedBytes} physically copied, {linkedBytes} hardlinked)", ConsoleOutput.Verbosity.NormalEvents);
+			userInterface.report(1, $"Copy process duration: {totalTime:n0} seconds.", ConsoleOutput.Verbosity.NormalEvents);
+			userInterface.report(1, $"Total files copied: {allCopiedFiles:n0} ({physicallyCopiedFiles:n0} new physical copies needed, {linkedFiles:n0} hardlinks utilized)", ConsoleOutput.Verbosity.NormalEvents);
+			userInterface.report(1, $"Total bytes copied: {allCopiedBytes:n0} ({physicallyCopiedBytes:n0} physically copied, {linkedBytes:n0} hardlinked)", ConsoleOutput.Verbosity.NormalEvents);
 			if (skippedFiles > 0)
-				userInterface.report(1, $"Skipped: {skippedFiles} files ({skippedBytes} bytes)", ConsoleOutput.Verbosity.NormalEvents);
+				userInterface.report(1, $"Skipped: {skippedFiles:n} files ({skippedBytes:n} bytes)", ConsoleOutput.Verbosity.NormalEvents);
 		} // end doBackup()
 
 
