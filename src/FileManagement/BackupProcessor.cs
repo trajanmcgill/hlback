@@ -61,45 +61,47 @@ namespace hlback.FileManagement
 				userInterface.report(1, $"Scanning {sourcePath.BaseItemFullPath}...", ConsoleOutput.Verbosity.NormalEvents);
 				BackupSizeInfo currentTreeSizeInfo = sourcePath.calculateSize();
 
-				userInterface.report(2, $"Files found: {currentTreeSizeInfo.fileCount_All}; Bytes: {currentTreeSizeInfo.byteCount_All}", ConsoleOutput.Verbosity.NormalEvents);
+				userInterface.report(2, $"Files found: {currentTreeSizeInfo.fileCount_All:n0}; Bytes: {currentTreeSizeInfo.byteCount_All:n0}", ConsoleOutput.Verbosity.NormalEvents);
 				totalExpectedSizeInfo += currentTreeSizeInfo;
 			}
 
 			userInterface.report(1, $"Total files found: {totalExpectedSizeInfo.fileCount_All:n0}; Total Bytes: {totalExpectedSizeInfo.byteCount_All:n0}", ConsoleOutput.Verbosity.NormalEvents);
 
-			// Get the backups root directory and get or create the backups database at that location.
+			// Get the backups root directory and get or create the backups database at that location,
+			// and set up variables used for tracking the backup process.
 			DirectoryInfo backupsRootDirectory = new DirectoryInfo(backupsDestinationRootPath);
-			BackupsDatabase database = new BackupsDatabase(backupsDestinationRootPath, userInterface);
-
-			// Create subdirectory for this new backup.
-			DirectoryInfo destinationBaseDirectory = createBackupTimeSubdirectory(backupsRootDirectory);
-			userInterface.report($"Backing up to {destinationBaseDirectory.FullName}", ConsoleOutput.Verbosity.NormalEvents);
-
-			// Copy all the files.
-			DateTime copyStartTime = DateTime.Now;
 			BackupSizeInfo completedBackupSizeInfo = new BackupSizeInfo { fileCount_All = 0, fileCount_Unique = 0, byteCount_All = 0, byteCount_Unique = 0 };
-			foreach (SourcePathInfo currentSourcePath in sourcePaths)
+			DateTime copyStartTime = DateTime.Now;
+			using(BackupsDatabase database = new BackupsDatabase(backupsDestinationRootPath, userInterface))
 			{
-				BackupSizeInfo currentSourceBackupSizeInfo;
-				string driveName;
+				// Create subdirectory for this new backup.
+				DirectoryInfo destinationBaseDirectory = createBackupTimeSubdirectory(backupsRootDirectory);
+				userInterface.report($"Backing up to {destinationBaseDirectory.FullName}", ConsoleOutput.Verbosity.NormalEvents);
 
-				if (pathIsRootDirectory(currentSourcePath.BaseItemFullPath, out driveName))
+				// Copy all the files.
+				foreach (SourcePathInfo currentSourcePath in sourcePaths)
 				{
-					currentSourceBackupSizeInfo =
-						makeFolderTreeBackup(
-							currentSourcePath, Path.Combine(destinationBaseDirectory.FullName, driveName + "_root"),
-							database, totalExpectedSizeInfo, completedBackupSizeInfo);
+					BackupSizeInfo currentSourceBackupSizeInfo;
+					string driveName;
+
+					if (pathIsRootDirectory(currentSourcePath.BaseItemFullPath, out driveName))
+					{
+						currentSourceBackupSizeInfo =
+							makeFolderTreeBackup(
+								currentSourcePath, Path.Combine(destinationBaseDirectory.FullName, driveName + "_root"),
+								database, totalExpectedSizeInfo, completedBackupSizeInfo);
+					}
+					else
+					{
+						currentSourceBackupSizeInfo =
+							makeFolderTreeBackup(
+								currentSourcePath, destinationBaseDirectory.FullName,
+								database, totalExpectedSizeInfo, completedBackupSizeInfo);
+					}
+					
+					completedBackupSizeInfo += currentSourceBackupSizeInfo;
 				}
-				else
-				{
-					currentSourceBackupSizeInfo =
-						makeFolderTreeBackup(
-							currentSourcePath, destinationBaseDirectory.FullName,
-							database, totalExpectedSizeInfo, completedBackupSizeInfo);
-				}
-				
-				completedBackupSizeInfo += currentSourceBackupSizeInfo;
-			}
+			} // end using(database)
 			DateTime copyEndTime = DateTime.Now;
 
 			int totalTime = (int)Math.Round(copyEndTime.Subtract(copyStartTime).TotalSeconds);
