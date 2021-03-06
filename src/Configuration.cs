@@ -45,8 +45,12 @@ namespace hlback
 		/// </param>
 		/// <param name="backupSourcePaths">A collection of source paths from which to make backups.</param>
 		/// <param name="backupDestinationPath">A full path to a base location in which backups should be placed.</param>
+		/// <exception cref="ArgumentNullException">Thrown when backupSourcePaths argument is null.</exception>
 		public Configuration(int? maxHardLinksPerFile, int? maxDaysBeforeNewFullFileCopy, List<SourcePathInfo> backupSourcePaths, string backupDestinationPath)
 		{
+			if (backupSourcePaths == null)
+				throw new ArgumentNullException("Error: backupSourcePaths list cannot be null.");
+			
 			// Initialize member variables.
 			MaxHardLinksPerFile = maxHardLinksPerFile;
 			MaxDaysBeforeNewFullFileCopy = maxDaysBeforeNewFullFileCopy;

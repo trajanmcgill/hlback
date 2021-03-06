@@ -32,13 +32,14 @@ namespace hlback
 			try { config = OptionsProcessor.getRuntimeConfiguration(args); }
 			catch (ErrorManagement.OptionsException e)
 			{
-				// There was an invalid option specified. Tell the user and exit with an error code.
+				// There was an invalid option specified or an error was encountered reading from the specified sources file. Tell the user and exit with an error code.
 				userInterface.report("", ConsoleOutput.Verbosity.ErrorsAndWarnings);
 				userInterface.report($"Error: {e.Message}", ConsoleOutput.Verbosity.ErrorsAndWarnings);
 				printUsage(userInterface);
 				return (int)ExitCode.Error_Usage;
 			}
 
+			// CHANGE CODE HERE: ADD ERROR-HANDLING for backup process itself
 			// Create a BackupProcessor object, set it to use the current run-time configuration and UI object,
 			// and run the backup process.
 			BackupProcessor backupProcessor = new BackupProcessor(config, userInterface);

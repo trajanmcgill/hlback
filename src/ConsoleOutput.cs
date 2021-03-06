@@ -40,6 +40,9 @@ namespace hlback
 		/// <summary>[overload 1] Takes a report and, if the importance rises to a level at or above the current verbosity level, delivers it to the user.</summary>
 		/// <param name="text">A <c>string</c> containing the information to be displayed.</param>
 		/// <param name="importance">A <c>ConsoleOutput.Verbosity</c> enum value indicating the importance of the report.</param>
+		/// <exception cref="System.IO.IOException">
+		/// 	Can occur when Console.Write() or Console.WriteLine() fail - likely due to something like being redirected to a file and the disk being full.
+		/// </exception>
 		public void report(string text, Verbosity importance)
 		{
 			// Only if the importance value exceeds this ConsoleOutput object's verbosity level will we write it out to the user.
@@ -63,6 +66,9 @@ namespace hlback
 		/// <param name="indentLevel">An <c>int</c> indicating how many tab stops to indent the output to the user.</param>
 		/// <param name="text">A <c>string</c> containing the information to be displayed.</param>
 		/// <param name="importance">A <c>ConsoleOutput.Verbosity</c> enum value indicating the importance of the report.</param>
+		/// <exception cref="System.IO.IOException">
+		/// 	Can occur when Console.Write() or Console.WriteLine() fail - likely due to something like being redirected to a file and the disk being full.
+		/// </exception>
 		public void report(int indentLevel, string text, Verbosity importance)
 		{
 			// Only if the importance value exceeds this ConsoleOutput object's verbosity level will we write it out to the user.
@@ -92,6 +98,9 @@ namespace hlback
 		/// <param name="newCompletionPercentage">An <c>int</c> indicating the degree of completion to show.</param>
 		/// <param name="newCompletionPercentage">An <c>int</c> indicating the degree of completion shown last time it was reported to the user.</param>
 		/// <param name="importance">A <c>ConsoleOutput.Verbosity</c> enum value indicating the importance of the report.</param>
+		/// <exception cref="System.IO.IOException">
+		/// 	Can occur when Console.Write() or Console.WriteLine() fail - likely due to something like being redirected to a file and the disk being full.
+		/// </exception>
 		public void reportProgress(int newCompletionPercentage, int lastCompletionPercentage, Verbosity importance)
 		{
 			// Only if the importance value exceeds this ConsoleOutput object's verbosity level will we write it out to the user.

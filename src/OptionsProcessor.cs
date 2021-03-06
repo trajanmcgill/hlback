@@ -33,7 +33,9 @@ namespace hlback
 		/// <summary>Parses all the options specified on the command-line string.</summary>
 		/// <returns>A <c>Configuration</c> object containing the run-time settings for this run of the application.</returns>
 		/// <param name="args">An array of all the command-line arguments to parse.</param>
-		/// <exception cref="ErrorManagement.OptionsException">Thrown when needed parameters are missing or specified ones are invalid.</exception>
+		/// <exception cref="ErrorManagement.OptionsException">
+		/// 	Thrown when needed parameters are missing, specified ones are invalid, or an error is encountered reading configuration info from a specified sources file.
+		/// </exception>
 		public static Configuration getRuntimeConfiguration(string[] args)
 		{
 			// Variables for holding configuration setting values to be returned.
@@ -149,9 +151,10 @@ namespace hlback
 		///		Each item will be tested by rules in the order those rules are defined.
 		/// </summary>
 		/// <returns>
-		/// A <c>List</c> of <c>SourcePathInfo</c> objects defining the source paths and rules for each defined in the file.
+		/// 	A <c>List</c> of <c>SourcePathInfo</c> objects defining the source paths and rules for each defined in the file.
 		/// </returns>
 		/// <param name="filePath">A <c>string</c> containing the full path to a file to read as a list of source paths and rules.</param>
+		/// <exception cref="ErrorManagement.OptionsException">Thrown when specified file cannot be found or cannot be read.</exception>
 		private static List<SourcePathInfo> readSourcePathsFile(string filePath)
 		{
 			List<SourcePathInfo> sourcePaths = new List<SourcePathInfo>(); // List to build and return.
@@ -161,44 +164,56 @@ namespace hlback
 			RuleSet currentRuleSet = new RuleSet();
 
 			// Open the file for reading.
-			using(StreamReader reader = new StreamReader(filePath))
+			try
 			{
-				// Read the entire file and parse it line by line.
-				for (string currentLine = reader.ReadLine(); currentLine != null; currentLine = reader.ReadLine())
+				using(StreamReader reader = new StreamReader(filePath))
 				{
-					// Ignore empty lines or those containing only whitespace.
-					if (currentLine.Trim().Length < 1)
-						continue;
-					
-					RuleSet.AllowanceType? ruleType;
-					Regex ruleDefinition;
-					if (tryParseAsRule(currentLine, out ruleType, out ruleDefinition))
+					// Read the entire file and parse it line by line.
+					for (string currentLine = reader.ReadLine(); currentLine != null; currentLine = reader.ReadLine())
 					{
-						// A rule that comes where no path has yet been enountered is an error.
-						if (currentSourceItemPath == null)
-							throw new OptionsException($"Source paths file {filePath} contains a rule but no path to which to apply that rule.");
+						// Ignore empty lines or those containing only whitespace.
+						if (currentLine.Trim().Length < 1)
+							continue;
 						
-						// Add this rule to the set of rules applying to the current source path.
-						currentRuleSet.addRule((RuleSet.AllowanceType)ruleType, ruleDefinition);
-					}
-					else // Not a rule, so it must be the next source path.
-					{
-						// If we were already reading rules for a source path, this means we've completed reading the rule set for that one.
-						// Add that path and its rules to the list we will return from this function.
-						if (currentSourceItemPath != null)
-							sourcePaths.Add(new SourcePathInfo(currentSourceItemPath, currentRuleSet));
-						
-						// Store the current line as the new source path, and reset the rule definitions to an empty set
-						// before reading in the rules associated with this new source path.
-						currentSourceItemPath = Path.GetFullPath(currentLine);
-						currentRuleSet = new RuleSet();
-					} // end if / else on (currentLine[0] == '+' || currentLine[0] == '-')
-				} // end for loop iterating through lines of the file.
+						RuleSet.AllowanceType? ruleType;
+						Regex ruleDefinition;
+						if (tryParseAsRule(currentLine, out ruleType, out ruleDefinition))
+						{
+							// A rule that comes where no path has yet been enountered is an error.
+							if (currentSourceItemPath == null)
+								throw new OptionsException($"Source paths file {filePath} contains a rule but no path to which to apply that rule.");
+							
+							// Add this rule to the set of rules applying to the current source path.
+							currentRuleSet.addRule((RuleSet.AllowanceType)ruleType, ruleDefinition);
+						}
+						else // Not a rule, so it must be the next source path.
+						{
+							// If we were already reading rules for a source path, this means we've completed reading the rule set for that one.
+							// Add that path and its rules to the list we will return from this function.
+							if (currentSourceItemPath != null)
+								sourcePaths.Add(new SourcePathInfo(currentSourceItemPath, currentRuleSet));
+							
+							// Store the current line as the new source path, and reset the rule definitions to an empty set
+							// before reading in the rules associated with this new source path.
+							currentSourceItemPath = Path.GetFullPath(currentLine);
+							currentRuleSet = new RuleSet();
+						} // end if / else on (currentLine[0] == '+' || currentLine[0] == '-')
+					} // end for loop iterating through lines of the file.
 
-				// We've reached the end of the file. If we were reading info about a source path,
-				// add that path and its rules to the list to return.
-				if (currentSourceItemPath != null)
-					sourcePaths.Add(new SourcePathInfo(currentSourceItemPath, currentRuleSet));
+					// We've reached the end of the file. If we were reading info about a source path,
+					// add that path and its rules to the list to return.
+					if (currentSourceItemPath != null)
+						sourcePaths.Add(new SourcePathInfo(currentSourceItemPath, currentRuleSet));
+				} // end using(reader)
+			}
+			catch (Exception e)
+			{
+				if (e is ArgumentException || e is ArgumentNullException || e is FileNotFoundException || e is DirectoryNotFoundException)
+					throw new OptionsException($"Error attempting to access or open sources file. File or path may not exist: {filePath}", e);
+				else if (e is IOException)
+					throw new OptionsException($"Error reading from sources file: {filePath}", e);
+				else
+					throw;
 			}
 
 			return sourcePaths;
