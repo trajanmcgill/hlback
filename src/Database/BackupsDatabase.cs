@@ -8,13 +8,6 @@ namespace hlback.Database
 {
 	class BackupsDatabase : IDisposable
 	{
-		private enum DatabaseRecordFileValidity
-		{
-			Invalid,
-			Nonmatch,
-			ValidMatch
-		}
-
 		private const long TicksPerDay = 10000000L * 60 * 60 * 24;
 
 		private const string DatabaseFileName = ".hlbackdatabase";
@@ -71,28 +64,30 @@ namespace hlback.Database
 					string lastValidPotentialMatch = null;
 					string backupRecordFileFullPath = Path.Combine(backupsRootPath, fileBackupRecordToCheck.Path);
 
-					DatabaseRecordFileValidity oldBackupFileMatchValidity =
-						checkFileBackupRecord(currentHardLinkGroupRecord, fileBackupRecordToCheck, backupRecordFileFullPath, originFileSize, originFileLastWriteTimeUTC);
-
-					if (oldBackupFileMatchValidity == DatabaseRecordFileValidity.ValidMatch)
+					if (verifyBackedUpFileAgainstRecord(currentHardLinkGroupRecord, fileBackupRecordToCheck, backupsRootPath))
 					{
-						// Database record points to a valid, matching previous backup file.
-						// Remember this one as a possibly usable file to use as a hard link target.
-						lastValidPotentialMatch = backupRecordFileFullPath;
+						// Database record still matches the previous backup file (backed-up file hasn't been modified or deleted since the record was made).
+						// Make sure it matches the origin file
+						if (fileMatchesSizeAndDate(backupRecordFileFullPath, originFileSize, originFileLastWriteTimeUTC))
+						{
+							// Database record points to a valid, matching previous backup file.
+							// Remember this one as a possibly usable file to use as a hard link target.
+							lastValidPotentialMatch = backupRecordFileFullPath;
+						}
+						else
+						{
+							// Something about the file pointed to in this record doesn't match the origin file (e.g., last modified date).
+							// Can't use this one (or others that are hard links of the same physical file) as a hard link source.
+							// Stop looking at records in this group of identical hard links and move on to the next group.
+							break;
+						}
 					}
-					else if (oldBackupFileMatchValidity == DatabaseRecordFileValidity.Invalid)
+					else
 					{
 						// The file referred to by this database record no longer exists or has been modified.
 						// This database record is no longer valid, so delete the record.
 						currentHardLinkGroupRecord.Files.RemoveAt(i);
 						backupFileGroupCollection.Update(currentHardLinkGroupRecord);
-					}
-					else // Nonmatch
-					{
-						// Something about the file pointed to in this record doesn't match the origin file (e.g., last modified date).
-						// Can't use this one (or others that are hard links of the same physical file) as a hard link source.
-						// Stop looking at records in this group of identical hard links and move on to the next group.
-						break;
 					}
 
 					// If we have found a match and haven't hit the max hard links allowed per physical copy, break out and stop looking for a link source.
@@ -165,25 +160,31 @@ namespace hlback.Database
 		} // end Dispose() [overload 2]
 
 
-		private DatabaseRecordFileValidity checkFileBackupRecord(
-			GroupRecord groupRecordInfo, FileBackupRecord fileRecordInfo, string backupFilePath,
-			long originFileSize, DateTime originFileLastWriteTimeUTC, string originFileHash = null)
+		private bool verifyBackedUpFileAgainstRecord(GroupRecord groupRecordInfo, FileBackupRecord fileRecordInfo, string basePath)
 		{
-			FileInfo backupFile = new FileInfo(backupFilePath);
+			FileInfo backedUpFile = new FileInfo(Path.Combine(basePath, fileRecordInfo.Path));
 
-			if (!backupFile.Exists)
-				return DatabaseRecordFileValidity.Invalid; // Record is invalid if the file doesn't still exist.
-			else if (backupFile.LastWriteTimeUtc.Ticks != fileRecordInfo.LastModificationDate_UTC_Ticks)
-				return DatabaseRecordFileValidity.Invalid; // Record is invalid if its last modification time is different from what was stored in the database.
-			else if (backupFile.Length != groupRecordInfo.FileSize)
-				return DatabaseRecordFileValidity.Invalid; // Record is invalid if the file size no longer matches what was stored in the database.
-			else if (backupFile.Length != originFileSize || backupFile.LastWriteTimeUtc != originFileLastWriteTimeUTC)
-				return DatabaseRecordFileValidity.Nonmatch; // The already-backed-up file doesn't match the origin file (e.g., different date because the origin is a copy). Return Nonmatch.
-			else if (originFileHash != null && originFileHash != groupRecordInfo.Hash)
-				return DatabaseRecordFileValidity.Invalid; // Function call specified checking the hash of the backed-up file, and it doesn't match what was in the database record.
-			else
-				return DatabaseRecordFileValidity.ValidMatch; // File record is valid and also matches the origin file.
-		} // end checkFileBackupRecord()
+			if (!backedUpFile.Exists)
+				return false; // Record is invalid because the previously backed-up file doesn't still exist.
+			else if (backedUpFile.LastWriteTimeUtc.Ticks != fileRecordInfo.LastModificationDate_UTC_Ticks)
+				return false; // Record is invalid because the previously backed-up file's modification time is now different from what was stored in the database.
+			else if (backedUpFile.Length != groupRecordInfo.FileSize)
+				return false; // Record is invalid because the previously backed-up file size no longer matches what was stored in the database.
+
+			return true; // File record matches the backed-up file.
+		} // end verifyBackedUpFileAgainstRecord()
+
+
+		private bool fileMatchesSizeAndDate(string filePath, long size, DateTime lastWriteTimeUTC)
+		{
+			FileInfo fileToCheck = new FileInfo(filePath);
+			if (fileToCheck.Length != size)
+				return false;
+			else if (fileToCheck.LastWriteTimeUtc != lastWriteTimeUTC)
+				return false;
+			
+			return true;
+		} // end fileMatchesSizeAndDate()
 
 	} // end class Database
 }
