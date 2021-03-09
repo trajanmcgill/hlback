@@ -50,7 +50,7 @@ namespace hlback
         } // end Main()
 
 
-        // printUsage:
+        // printUsage():
 		/// <summary>Prints the application usage to the specified UI.</summary>
 		/// <param name="userInterface">A <c>ConsoleOutput</c> object to which to send the usage instructions string.</param>
 		private static void printUsage(ConsoleOutput userInterface)
