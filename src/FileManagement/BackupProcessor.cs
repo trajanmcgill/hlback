@@ -6,7 +6,7 @@ using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using hlback.Database;
-using System.Linq;
+using hlback.ErrorManagement;
 
 namespace hlback.FileManagement
 {
@@ -166,10 +166,16 @@ namespace hlback.FileManagement
 			// keep trying with a new name until there is no conflict.
 			string backupDestinationSubDirectoryName;
 			DirectoryInfo subDirectory = null;
-			while(subDirectory == null)
+			while (subDirectory == null)
 			{
 				backupDestinationSubDirectoryName = DateTime.Now.ToString(TimestampDirectoryCreationPattern);
-				subDirectory = createSubDirectory(baseDirectory, backupDestinationSubDirectoryName);
+				try
+				{	subDirectory = createSubDirectory(baseDirectory, backupDestinationSubDirectoryName);	}
+				catch (ArgumentException)
+				{	throw new PathException($"Error: Unable to create base backup directory \"{backupDestinationSubDirectoryName}\" because it is an invalid directory name. Ensure that the destination drive is not formatted with FAT or another file system that does not support long filenames.");	}
+				catch (IOException e)
+				{	throw new PathException($"Error: Unable to create base backup directory \"{backupDestinationSubDirectoryName}\". Drive full or other IO Error.", e);	}
+
 				if (subDirectory == null)
 					System.Threading.Thread.Sleep(1);
 			}
@@ -253,7 +259,8 @@ namespace hlback.FileManagement
 					thisTreeCompletedSizeInfo.byteCount_All += currentSourceFile.Length;
 
 					// Record in the backups database the new copy or link that was made.
-					database.addFileBackupRecord(fullItemDestinationPath, currentSourceFile.Length, fileHash, currentSourceFile.LastWriteTimeUtc, (hardLinkMatch == null ? null : hardLinkMatch.ID));
+					FileInfo newFile = new FileInfo(fullItemDestinationPath);
+					database.addFileBackupRecord(fullItemDestinationPath, newFile.Length, fileHash, newFile.LastWriteTimeUtc, (hardLinkMatch == null ? null : hardLinkMatch.ID));
 				} // end if/else on (item.Type == BackupItemInfo.ItemType.Directory)
 
 				previousPercentComplete = percentComplete;
@@ -267,25 +274,21 @@ namespace hlback.FileManagement
 
 		private DirectoryInfo createSubDirectory(DirectoryInfo baseDirectory, string subDirectoryName)
 		{
-			try { return baseDirectory.CreateSubdirectory(subDirectoryName); }
-			catch(IOException)
+			string newFullPath = Path.GetFullPath(Path.Combine(baseDirectory.FullName, subDirectoryName));
+			try
+			{	return System.IO.Directory.CreateDirectory(newFullPath);	}
+			catch (ArgumentException)
+			{	throw new ArgumentException($"Error trying to create directory: {subDirectoryName} is an invalid directory name.");	}
+			catch (UnauthorizedAccessException)
+			{	throw new PathException($"Error trying to create directory, unauthorized access exception trying to create directory: {newFullPath}");	}
+			catch (IOException)
 			{
 				if (baseDirectory.GetDirectories(subDirectoryName).Length > 0)
 					return null; // Creation failed because the directory already existed.
 				else
 					throw; // Creation failed for some other reason.
 			}
-
 		} // end createSubDirectory()
-
-
-		private void copyFile(string newFileName, string sourceFileName, bool asHardLink = false)
-		{
-			if (asHardLink)
-				hardLinker.createHardLink(newFileName, sourceFileName);
-			else
-				File.Copy(sourceFileName, newFileName);
-		} // end copyFile()
 
 
 		private string normalizeHash(byte[] hashBytes)
