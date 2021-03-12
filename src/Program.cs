@@ -38,6 +38,13 @@ namespace hlback
 				printUsage(userInterface);
 				return (int)ExitCode.Error_Usage;
 			}
+			catch (OutOfMemoryException e)
+			{
+				// There was an invalid option specified or an error was encountered reading from the specified sources file. Tell the user and exit with an error code.
+				userInterface.report("", ConsoleOutput.Verbosity.ErrorsAndWarnings);
+				userInterface.report($"Out of memory error: {e.Message}", ConsoleOutput.Verbosity.ErrorsAndWarnings);
+				return (int)ExitCode.Error_General;
+			}
 
 			// CHANGE CODE HERE: ADD ERROR-HANDLING for backup process itself
 			// Create a BackupProcessor object, set it to use the current run-time configuration and UI object,

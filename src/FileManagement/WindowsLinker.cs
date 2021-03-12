@@ -14,6 +14,7 @@ namespace hlback.FileManagement
 		public void createHardLink(string newLinkFileName, string existingTargetFileName)
 		{
 			// Call the external function which accomplishes this, but do so with long path versions of the file names.
+			// CHANGE CODE HERE: deal with errors creating links
 			CreateHardLink(longFileName(newLinkFileName), longFileName(existingTargetFileName), IntPtr.Zero);
 		} // end createHardLink()
 

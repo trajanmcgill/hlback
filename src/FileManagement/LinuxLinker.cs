@@ -3,7 +3,7 @@ using System.Diagnostics;
 
 namespace hlback.FileManagement
 {
-	// WindowsLinker:
+	// LinuxLinker:
 	/// <summary>Class for creating file hard links on a Windows environment.</summary>
 	class LinuxLinker : ILinker
 	{
@@ -27,6 +27,7 @@ namespace hlback.FileManagement
 			// Create the cp command process and wait for it to complete before returning.
 			using(Process commandProcess = new Process() { StartInfo = startInfo })
 			{
+				// CHANGE CODE HERE: deal with errors running the process to create links
 				commandProcess.Start();
 				commandProcess.WaitForExit();
 			}

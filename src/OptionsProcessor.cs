@@ -36,6 +36,7 @@ namespace hlback
 		/// <exception cref="ErrorManagement.OptionsException">
 		/// 	Thrown when needed parameters are missing, specified ones are invalid, or an error is encountered reading configuration info from a specified sources file.
 		/// </exception>
+		/// <exception cref="OutOfMemoryException">Thrown when memory runs out trying to read the specified sources file.</exception>
 		public static Configuration getRuntimeConfiguration(string[] args)
 		{
 			// Variables for holding configuration setting values to be returned.
@@ -115,7 +116,7 @@ namespace hlback
 			
 			// If a source paths file was specified, add all its source paths and rules to the list of source paths and rules.
 			if (sourcesFilePath != null)
-				sourcePaths.AddRange(readSourcePathsFile(sourcesFilePath));
+				sourcePaths.AddRange(readSourcePathsFile(sourcesFilePath)); // Any exception while reading this file we will just allow to bubble out to the caller.
 			
 			// If two sources have the same name, the second one to be backed up will clobber the first one. Don't allow this.
 			if (sourcePaths.GroupBy(source => source.getAllItems().First().RelativePath).Any(group => (group.Count() > 1)))
@@ -155,6 +156,7 @@ namespace hlback
 		/// </returns>
 		/// <param name="filePath">A <c>string</c> containing the full path to a file to read as a list of source paths and rules.</param>
 		/// <exception cref="ErrorManagement.OptionsException">Thrown when specified file cannot be found or cannot be read.</exception>
+		/// <exception cref="OutOfMemoryException">Thrown when memory runs out trying to read the file.</exception>
 		private static List<SourcePathInfo> readSourcePathsFile(string filePath)
 		{
 			List<SourcePathInfo> sourcePaths = new List<SourcePathInfo>(); // List to build and return.
@@ -206,15 +208,14 @@ namespace hlback
 						sourcePaths.Add(new SourcePathInfo(currentSourceItemPath, currentRuleSet));
 				} // end using(reader)
 			}
-			catch (Exception e)
-			{
-				if (e is ArgumentException || e is ArgumentNullException || e is FileNotFoundException || e is DirectoryNotFoundException)
-					throw new OptionsException($"Error attempting to access or open sources file. File or path may not exist: {filePath}", e);
-				else if (e is IOException)
-					throw new OptionsException($"Error reading from sources file: {filePath}", e);
-				else
-					throw;
-			}
+			catch (OptionsException)
+			{	throw;	}
+			catch (IOException e)
+			{	throw new OptionsException($"Error reading from sources file: {filePath}", e);	}
+			catch (OutOfMemoryException e)
+			{	throw new OutOfMemoryException($"Error; out of memory while trying to read from sources file: {filePath}", e);	}
+			catch (Exception e) when (e is ArgumentException || e is ArgumentNullException || e is FileNotFoundException || e is DirectoryNotFoundException)
+			{	throw new OptionsException($"Error attempting to access or open sources file. File or path may not exist: {filePath}", e);	}
 
 			return sourcePaths;
 		} // end readSourcePathsFile()
