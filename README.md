@@ -37,7 +37,54 @@ The primary differentiating features of hlback are these:
 - Setup
     - ADD THIS SECTION
 - Usage
-    - ADD THIS SECTION
+> hlback [--MaxHardLinkAge AGE] [--MaxHardLinksPerFile LINKSCOUNT] [--SourcesFile SOURCESFILE] [SOURCE1 [SOURCE2] ...] DESTINATION
+>
+> Backs up files from each SOURCE path to a time-stamped directory in DESTINATION path.
+>
+> Where possible, creates hard links to previous backup copies instead of new full copies, subject to the below rules:
+>
+> - SOURCE1 [etc.], DESTINATION: The last path specified on the command line will be interpreted as the destination path in which to put the backups. Every path prior to that will be interpreted as a list of source paths from which to copy. Listing source paths this way is easy for a simple copy-everything backup, but if anything needs to be excluded from the backup, specifying a sources file as decribed below is needed.
+>
+> - [optional] --SourcesFile or -SF (or, on Windows only, /SourcesFile or /SF):
+>        If specified, will read a list of sources from the file SOURCESFILE.
+>        File must contain text defining a series of one or more source paths as follows:
+>   - A line declaring a path to the source file or directory to be backed up, followed (for directory sources) by any number of lines each starting with one of the below characters followed by a regular expression which is used to determine if the rule applies to an item. The regular expression is tested against the path and file name of each item relative to the container of the base path specified as a source, so if the source path is `/foo/bar/` then for the file `/foo/bar/asdf.txt` then the base path is `/foo/bar/`, its container would be `/foo/`, and the regular expression would be tested against the portion `bar/asdf.txt`.
+>      - `+` indicates an inclusion rule. So the line `+foo` means any item where the path includes the string `foo` will be included.
+>      - `-` indicates an exclusion rule. So the line `-foo` means any item where the path includes the string `foo` will be included.
+>      - `!` indicates a full-tree exlucsion rule. So the line `!foo` means any directory where the path includes the string `foo` will be totally ignored. It won't be traversed at all. (Whereas a simple exclusion rule on a directory will still result in searching for files and directories beneath that directory looking for items that should be included based on other rules.)
+>   - Each item within the source directory and its subdirectories will be tested against each regular expression rule for inclusion or exclusion.
+>   - Rules are applied in the order defined, and all rules are applied to each item within that source path.
+>
+> - [optional] --MaxHardLinkAge or -MA (or, on Windows only, /MaxHardLinkAge or /MA):
+        If specified, will limit hard links to targets that are under AGE days old (creates a new full copy if all previous copies are too old).
+>
+> - [optional] --MaxHardLinksPerFile or -ML (or, on Windows only, /MaxHardLinksPerFile or /ML):
+        If specified, will limit the number of hard links to a particular physical copy to LINKSCOUNT (creates a new full copy if this number would be exceeded).
+
+## FAQ
+- **How do I restore a backup?**
+  
+  Every backup acts as a full backup, so you should be able to simply copy everything back to where it belongs.
+
+- **What if I delete one of the backed-up files? Will the hard links to that file no longer work?**
+
+  Good question, but no. The way hard links work is that all of the files, including the original copy, are just pointers to a physical copy on the disk. The file system keeps count of how many links exist to a given physical file, and only deletes the physical file when all of the links to it have been deleted. So you can feel free to delete unwanted backups without fearing they will damage later backups that linked to the same files.
+
+- **What is this .hlbackdatabase file that shows up in my destination directory?**
+
+  That is a database of all the files copied in previous backups to that destination directory, and their file hashes. It is used for matching up duplicate files so the process knows when it can use a hard link and when it needs a new physical copy because the file doesn't already exist anywhere in the backup set.
+
+- **So will that database be out of date and work wrong if I delete some of my previous backups?**
+
+  It will be out of date in the sense that it will have records of files that no longer exist. But hlback always checks to make sure previously backed-up files still exist and are unchanged (in file size and modification date) before creating a hard link to them. If they have been deleted, the database records get cleaned up automatically.
+
+- **Okay, what if I delete the .hlbackdatabase file itself?**
+
+  The next run of hlback that tries to copy to that destination won't know about any of the files previously copied there, so it will fully copy every file. It will work just fine, but it will take up all the disk space of a full copy. It will, in the process, re-create the database file, though, so the next run after that will again be able to make full use of hard links for reducing space.
+
+- **Why don't I get much space back from deleting a backup?**
+
+  Remember, hard linking means each backup actually takes up much less space than it appears, since many files are really just links to other files. Deleting them won't free any more space than it used to make the backup in the first place.
 
 ## License
 ***
