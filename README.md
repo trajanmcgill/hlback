@@ -39,7 +39,7 @@ The primary differentiating features of hlback are these:
 	- .NET 5
 	- A file system on the backup drive that supports hard links (e.g., ext3, ext4, or NTFS). If you are using a hard drive for your backups on Windows or Linux, chances are high that you are using one of these file systems. USB sticks, however, are likely to be using a FAT file system which does not have a hard linking feature.
 - Setup
-    - ADD THIS SECTION
+    - Visit the [releases page](https://github.com/trajanmcgill/hlback/releases) to download the version for your operating system. There is no installer; just extract from the archive into any directory and run it from there.
 - Usage
 > hlback [--MaxHardLinkAge AGE] [--MaxHardLinksPerFile LINKSCOUNT] [--SourcesFile SOURCESFILE] [SOURCE1 [SOURCE2] ...] DESTINATION
 >
