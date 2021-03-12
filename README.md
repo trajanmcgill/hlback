@@ -7,10 +7,11 @@
 ## Table of Contents
 ***
 - [Introduction](#introduction)
-- [Using Concert.js](#using-concertjs)
+- [Using hlback](#using-hlback)
+- [FAQ](#faq)
 - [License](#license)
 - [Bug Reports and Suggested Enhancements](#bug-reports-and-suggested-enhancements)
-- [Contributing to Concert.js](#contributing-to-concertjs)
+- [Contributing to hlback](#contributing-to-hlback)
 - [Authors](#authors)
 - [Version History](#version-history)
 
@@ -19,6 +20,8 @@
 
 ### What is hlback?
 hlback is a cross-platform console application used for straightforward, simple execution of backups while taking up as little space as possible. It works on Linux and Windows, and runs on .NET 5.
+
+>IMPORTANT NOTE: hlback is still on a pre-1.0 release, and while it is believed to be working properly, some testing and handling of error conditions is not fully complete yet. Feel free to use, but please test for your own setup to make sure backups are identical to the originals (in other words, use on production or essential systems at your own risk).
 
 ### Why would I want to use this particular backup utility?
 The primary differentiating features of hlback are these:
@@ -34,6 +37,7 @@ The primary differentiating features of hlback are these:
 - Prerequisites
     - Windows or Linux
 	- .NET 5
+	- A file system on the backup drive that supports hard links (e.g., ext3, ext4, or NTFS). If you are using a hard drive for your backups on Windows or Linux, chances are high that you are using one of these file systems. USB sticks, however, are likely to be using a FAT file system which does not have a hard linking feature.
 - Setup
     - ADD THIS SECTION
 - Usage
