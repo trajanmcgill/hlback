@@ -72,10 +72,18 @@ namespace hlback
 			userInterface.report("--SourcesFile or -SF (or, on Windows only, /SourcesFile or /SF):", ConsoleOutput.Verbosity.ErrorsAndWarnings);
 			userInterface.report(1, "If specified, will read a list of sources from the file SOURCESFILE.", ConsoleOutput.Verbosity.ErrorsAndWarnings);
 			userInterface.report(1, "File must contain text defining a series of one or more source paths as follows:", ConsoleOutput.Verbosity.ErrorsAndWarnings);
-			userInterface.report(1, "A line declaring a path to the source file or directory to be backed up, followed (for directory sources) by", ConsoleOutput.Verbosity.ErrorsAndWarnings);
-			userInterface.report(1, "Any number of lines each starting with '+' (for inclusions) or '-' (for exclusions) followed by a regular expression.", ConsoleOutput.Verbosity.ErrorsAndWarnings);
-			userInterface.report(1, "Each item within the source directory and its subdirectories will be tested against each regular expression rule for inclusion or exclusion.", ConsoleOutput.Verbosity.ErrorsAndWarnings);
-			userInterface.report(1, "Rules are applied in the order defined, and all rules are applied to each item within that source path.", ConsoleOutput.Verbosity.ErrorsAndWarnings);
+			userInterface.report("", ConsoleOutput.Verbosity.ErrorsAndWarnings);
+			userInterface.report(1, "A line declaring a path to the source file or directory to be backed up, followed (for directory sources) by "
+				+ "any number of lines each starting with '+', '-', or '!' followed by a regular expression.",
+				ConsoleOutput.Verbosity.ErrorsAndWarnings);
+			userInterface.report(2, "'+' indicates matching items should be included.", ConsoleOutput.Verbosity.ErrorsAndWarnings);
+			userInterface.report(2, "'-' indicates matching items should be excluded (but subdirectories or files within those items can be included if they match other rules).", ConsoleOutput.Verbosity.ErrorsAndWarnings);
+			userInterface.report(2, "'!' indicates matching directories should be completely ignored, never traversed at all and items below them not considered for inclusion.", ConsoleOutput.Verbosity.ErrorsAndWarnings);
+			userInterface.report(1, "Each item within the source directory and its subdirectories will be tested against each regular expression rule for inclusion or exclusion. "
+				+ "The regular expression is tested against the path and file name of each item *relative to the container of the base path of the source*. "
+				+ "(E.g., if the source is '/foo/bar/' then for a file '/foo/bar/asdf.txt' the regular expression would be tested against 'bar/asdf.txt'",
+				ConsoleOutput.Verbosity.ErrorsAndWarnings);
+			userInterface.report(1, "Rules are applied in the order given, and all rules are applied to each item within that source path.", ConsoleOutput.Verbosity.ErrorsAndWarnings);
 			userInterface.report("", ConsoleOutput.Verbosity.ErrorsAndWarnings);
 			userInterface.report("--MaxHardLinkAge or -MA (or, on Windows only, /MaxHardLinkAge or /MA):", ConsoleOutput.Verbosity.ErrorsAndWarnings);
 			userInterface.report(1, "If specified, will limit hard links to targets that are under AGE days old (creates a new full copy if all previous copies are too old).", ConsoleOutput.Verbosity.ErrorsAndWarnings);
