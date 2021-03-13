@@ -167,7 +167,7 @@ namespace hlback.Database
 			if (!backedUpFile.Exists)
 				return false; // Record is invalid because the previously backed-up file doesn't still exist.
 			else if (backedUpFile.LastWriteTimeUtc.Ticks != fileRecordInfo.LastModificationDate_UTC_Ticks)
-				return false; // Record is invalid because the previously backed-up file's modification time is now different from what was stored in the database.
+				return false; // Record is invalid because the previously backed-up file's modification time indicates it has been changed since being put there.
 			else if (backedUpFile.Length != groupRecordInfo.FileSize)
 				return false; // Record is invalid because the previously backed-up file size no longer matches what was stored in the database.
 
